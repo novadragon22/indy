@@ -1,0 +1,1643 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>FOUNDRY // EVE Industrial Overseer</title>
+
+<!-- Tailwind (CDN build, fine for a static GitHub Pages SPA) -->
+<script src="https://cdn.tailwindcss.com"></script>
+<!-- EVE-flavoured monospace + display faces -->
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@500;700&display=swap" rel="stylesheet" />
+
+<script>
+  tailwind.config = {
+    theme: {
+      extend: {
+        fontFamily: {
+          mono: ['"Share Tech Mono"', 'ui-monospace', 'monospace'],
+          display: ['"Orbitron"', 'ui-monospace', 'monospace'],
+        },
+        colors: {
+          void:    '#06090c',
+          hull:    '#0a0f14',
+          panel:   '#0d141b',
+          line:    '#1b2731',
+          line2:   '#273744',
+          cyan:    '#3ad3e8',
+          cyandim: '#1c6f7c',
+          amber:   '#e8a13a',
+          green:   '#5ce89a',
+          red:     '#ff5247',
+          dim:     '#5d6b76',
+          ink:     '#aebcc6',
+        },
+      },
+    },
+  };
+</script>
+
+<style>
+  :root {
+    --cyan: #3ad3e8;
+    --amber: #e8a13a;
+    --red: #ff5247;
+    --line: #1b2731;
+  }
+  html, body { background: #06090c; }
+  body {
+    font-family: '"Share Tech Mono"', monospace;
+    color: #aebcc6;
+    /* faint horizontal scanline texture, very EVE */
+    background-image:
+      repeating-linear-gradient(0deg, rgba(58,211,232,0.018) 0px, rgba(58,211,232,0.018) 1px, transparent 1px, transparent 3px),
+      radial-gradient(1200px 600px at 70% -10%, rgba(58,211,232,0.06), transparent 60%);
+    background-attachment: fixed;
+  }
+  .font-display { font-family: 'Orbitron', monospace; }
+
+  /* EVE-style bracket panel: clipped corners + corner ticks */
+  .bracket {
+    position: relative;
+    background: linear-gradient(180deg, #0d141b 0%, #0a0f14 100%);
+    border: 1px solid var(--line);
+    clip-path: polygon(0 10px, 10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%);
+  }
+  .bracket::before, .bracket::after {
+    content: ''; position: absolute; width: 11px; height: 11px; pointer-events: none;
+    border-color: var(--cyan); opacity: 0.7;
+  }
+  .bracket::before { top: -1px; right: -1px; border-top: 2px solid; border-right: 2px solid; }
+  .bracket::after  { bottom: -1px; left: -1px; border-bottom: 2px solid; border-left: 2px solid; }
+
+  .eve-label { letter-spacing: 0.18em; text-transform: uppercase; }
+
+  /* tab buttons */
+  .tab-btn { position: relative; transition: color .15s, background .15s; }
+  .tab-btn[aria-selected="true"] { color: var(--cyan); background: rgba(58,211,232,0.06); }
+  .tab-btn[aria-selected="true"]::after {
+    content: ''; position: absolute; left: 0; right: 0; bottom: -1px; height: 2px; background: var(--cyan);
+    box-shadow: 0 0 10px var(--cyan);
+  }
+
+  /* pilot/corp sub-tabs (segmented control) */
+  .subtab { padding: 4px 16px; font-size: 11px; letter-spacing: .14em; text-transform: uppercase;
+    border: 1px solid var(--line); color: #5d6b76; background: #0b1117; cursor: pointer; transition: all .15s; }
+  .subtab + .subtab { border-left: 0; }
+  .subtab[aria-selected="true"] { color: var(--cyan); border-color: var(--cyan); background: rgba(58,211,232,0.08); }
+  .subtab:hover:not([aria-selected="true"]) { color: #aebcc6; }
+
+  table { border-collapse: collapse; width: 100%; }
+  thead th {
+    position: sticky; top: 0; z-index: 2;
+    background: #0b1117; color: var(--cyan);
+    letter-spacing: 0.12em; text-transform: uppercase; font-size: 11px;
+    text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--line2, #273744);
+    white-space: nowrap;
+  }
+  tbody td { padding: 8px 12px; border-bottom: 1px solid rgba(27,39,49,0.7); font-size: 13px; vertical-align: top; }
+  tbody tr:hover { background: rgba(58,211,232,0.04); }
+
+  .pill { display:inline-block; padding: 1px 7px; font-size: 11px; letter-spacing:.06em; border:1px solid; border-radius: 2px; }
+  .pill-t1     { color:#9fb4c0; border-color:#2f4250; }
+  .pill-t2     { color:var(--cyan); border-color:var(--cyan); }
+  .pill-faction{ color:var(--amber); border-color:var(--amber); }
+  .pill-t3     { color:#c08bff; border-color:#7a4fd0; }
+  .pill-officer{ color:var(--red); border-color:var(--red); }
+
+  .stat-ok    { color: var(--green, #5ce89a); }
+  .stat-warn  { color: var(--amber); }
+  .stat-crit  { color: var(--red); }
+
+  /* blinking critical banner */
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.45} }
+  .crit-pulse { animation: pulse 1.1s ease-in-out infinite; }
+
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: #06090c; }
+  ::-webkit-scrollbar-thumb { background: #1b2731; border: 1px solid #273744; }
+  ::-webkit-scrollbar-thumb:hover { background: #27414f; }
+
+  @media (prefers-reduced-motion: reduce) { .crit-pulse { animation: none; } }
+
+  :focus-visible { outline: 2px solid var(--cyan); outline-offset: 2px; }
+
+  /* styles reused inside the Picture-in-Picture HUD window */
+  .pip-body { background:#000 !important; color:#aebcc6; font-family:'"Share Tech Mono"',monospace; margin:0; padding:6px; }
+</style>
+</head>
+
+<body class="min-h-screen font-mono text-ink antialiased">
+
+<!-- ===================== TOP BAR ===================== -->
+<header class="border-b border-line bg-hull/80 backdrop-blur sticky top-0 z-40">
+  <div class="max-w-[1500px] mx-auto px-4 py-2.5 flex items-center gap-4 flex-wrap">
+    <div class="flex items-center gap-3">
+      <div class="w-7 h-7 bracket flex items-center justify-center text-cyan font-display text-sm">F</div>
+      <div>
+        <h1 class="font-display text-cyan text-base leading-none">FOUNDRY</h1>
+        <p class="text-[10px] eve-label text-dim leading-none mt-1">Industrial Overseer · ESI</p>
+      </div>
+    </div>
+
+    <div class="flex items-center gap-2 ml-auto text-[11px]">
+      <span id="data-mode" class="pill pill-faction eve-label">MOCK DATA</span>
+
+      <!-- zoom -->
+      <div class="flex items-center border border-line bg-panel" title="Zoom interface (Ctrl + / Ctrl -)">
+        <button id="zoom-out" class="px-2.5 py-1.5 text-cyan hover:bg-cyan/10" aria-label="Zoom out">−</button>
+        <span id="zoom-val" class="px-1 text-dim eve-label w-11 text-center select-none">100%</span>
+        <button id="zoom-in" class="px-2.5 py-1.5 text-cyan hover:bg-cyan/10" aria-label="Zoom in">+</button>
+      </div>
+
+      <select id="char-select" class="bg-panel border border-line text-ink text-xs px-2 py-1.5 eve-label focus:border-cyan">
+        <option value="all">ALL PILOTS</option>
+      </select>
+      <button id="settings-btn" class="bracket px-3 py-1.5 eve-label text-cyan hover:bg-cyan/10" title="Webhook alerts & connections">⚙ SETTINGS</button>
+      <button id="login-char-btn" class="bracket px-3 py-1.5 eve-label text-cyan hover:bg-cyan/10"
+              title="Log in a pilot for personal (character) data. Requests character scopes only.">+ ADD CHARACTER</button>
+      <button id="login-corp-btn" class="bracket px-3 py-1.5 eve-label text-green hover:bg-green/10"
+              title="Log in a director/accountant for corporation data. Requests corporation scopes only.">+ ADD CORP</button>
+      <button id="popout-btn" class="bracket px-3 py-1.5 eve-label text-amber hover:bg-amber/10" title="Float a borderless always-on-top HUD over the EVE client">
+        ▣ POP OUT MONITOR (KEEP ON TOP)
+      </button>
+    </div>
+  </div>
+
+  <!-- tab strip -->
+  <nav class="max-w-[1500px] mx-auto px-2 flex overflow-x-auto" role="tablist" aria-label="Views">
+    <button class="tab-btn eve-label text-dim px-4 py-3 text-xs whitespace-nowrap" role="tab" data-tab="assets"      aria-selected="true">01 · Asset Locator</button>
+    <button class="tab-btn eve-label text-dim px-4 py-3 text-xs whitespace-nowrap" role="tab" data-tab="blueprints"  aria-selected="false">02 · BPO Gap Analysis</button>
+    <button class="tab-btn eve-label text-dim px-4 py-3 text-xs whitespace-nowrap" role="tab" data-tab="production"  aria-selected="false">03 · Production Lines</button>
+    <button class="tab-btn eve-label text-dim px-4 py-3 text-xs whitespace-nowrap" role="tab" data-tab="fuel"        aria-selected="false">04 · Fuel & Decommission</button>
+    <button class="tab-btn eve-label text-dim px-4 py-3 text-xs whitespace-nowrap" role="tab" data-tab="refineries"  aria-selected="false">05 · Idle Refineries</button>
+  </nav>
+</header>
+
+<!-- ===================== SETTINGS MODAL ===================== -->
+<div id="settings-overlay" class="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm hidden items-start justify-center pt-16 px-4">
+  <div class="bracket w-full max-w-lg p-5 space-y-5" role="dialog" aria-modal="true" aria-label="Settings">
+    <div class="flex items-center">
+      <h2 class="font-display text-cyan text-sm eve-label">Settings</h2>
+      <button id="settings-close" class="ml-auto text-dim hover:text-cyan text-lg leading-none" aria-label="Close">✕</button>
+    </div>
+
+    <!-- Webhook -->
+    <section class="space-y-2">
+      <h3 class="text-amber text-xs eve-label">Alert Webhook</h3>
+      <p class="text-[11px] text-dim leading-relaxed">
+        Paste a Discord (or compatible) webhook URL. FOUNDRY posts a message when a structure
+        starts unanchoring or when fuel drops below 48 hours. Each alert fires once per event.
+      </p>
+      <input id="webhook-url" type="url" placeholder="https://discord.com/api/webhooks/…"
+             class="w-full bg-panel border border-line text-ink text-xs px-3 py-2 focus:border-cyan placeholder:text-dim" />
+      <div class="flex items-center gap-2">
+        <button id="webhook-save" class="bracket px-3 py-1.5 eve-label text-cyan hover:bg-cyan/10 text-xs">SAVE</button>
+        <button id="webhook-test" class="bracket px-3 py-1.5 eve-label text-amber hover:bg-amber/10 text-xs">SEND TEST</button>
+        <button id="webhook-clear" class="bracket px-3 py-1.5 eve-label text-dim hover:bg-red/10 hover:text-red text-xs">CLEAR</button>
+        <span id="webhook-status" class="text-[11px] eve-label text-dim"></span>
+      </div>
+    </section>
+
+    <!-- Connections -->
+    <section class="space-y-2 border-t border-line pt-4">
+      <h3 class="text-amber text-xs eve-label">Connections</h3>
+      <p class="text-[11px] text-dim leading-relaxed">
+        <span class="text-cyan">Character</span> logins request personal scopes and fill the Pilot views.
+        <span class="text-green">Corp</span> logins request corporation scopes (Director / Accountant /
+        Station Manager roles needed) and fill the Corp views. The same pilot can be added as both.
+      </p>
+      <div id="connections-list" class="space-y-1 text-xs"></div>
+      <div class="flex items-center gap-2 mt-1">
+        <button id="settings-login-char" class="bracket px-3 py-1.5 eve-label text-cyan hover:bg-cyan/10 text-xs">+ ADD CHARACTER</button>
+        <button id="settings-login-corp" class="bracket px-3 py-1.5 eve-label text-green hover:bg-green/10 text-xs">+ ADD CORP</button>
+      </div>
+    </section>
+  </div>
+</div>
+
+<!-- ===================== MAIN ===================== -->
+<main class="max-w-[1500px] mx-auto px-4 py-5">
+
+  <!-- ---------- TAB 1: ASSET LOCATOR ---------- -->
+  <section id="tab-assets" data-panel class="space-y-4">
+    <div class="flex items-center gap-3 flex-wrap">
+      <h2 class="font-display text-cyan text-sm eve-label">Asset Locator</h2>
+      <div class="flex" role="tablist" aria-label="Asset level">
+        <button class="subtab" data-subbtn="assets:pilot" aria-selected="true">Pilot</button>
+        <button class="subtab" data-subbtn="assets:corp"  aria-selected="false">Corp</button>
+      </div>
+      <div class="ml-auto flex items-center gap-2 flex-wrap">
+        <div data-sorter="assets" class="flex items-center gap-2"></div>
+        <span class="text-cyan text-xs">⌕</span>
+        <input id="asset-search" type="text" placeholder="FILTER…"
+               class="bg-panel border border-line text-ink text-xs px-3 py-2 w-60 eve-label focus:border-cyan placeholder:text-dim" />
+      </div>
+    </div>
+
+    <div data-sub="assets:pilot" class="space-y-2">
+      <div class="flex items-center gap-3"><span class="text-[11px] text-dim">Personal hangars across connected pilots</span><span id="asset-count-char" class="ml-auto text-[11px] text-dim eve-label"></span></div>
+      <div class="bracket overflow-auto max-h-[68vh]">
+        <table>
+          <thead><tr><th>Item Name</th><th class="text-right">Quantity</th><th>Owner</th><th>System</th><th>Station / Structure</th><th>Hangar / Container</th></tr></thead>
+          <tbody id="asset-body-char"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div data-sub="assets:corp" hidden class="space-y-2">
+      <div class="flex items-center gap-3"><span class="text-[11px] text-dim">Corp hangar divisions &amp; deliveries (requires roles)</span><span id="asset-count-corp" class="ml-auto text-[11px] text-dim eve-label"></span></div>
+      <div class="bracket overflow-auto max-h-[68vh]">
+        <table>
+          <thead><tr><th>Item Name</th><th class="text-right">Quantity</th><th>Owner</th><th>System</th><th>Station / Structure</th><th>Hangar / Container</th></tr></thead>
+          <tbody id="asset-body-corp"></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- ---------- TAB 2: BLUEPRINT GAP ---------- -->
+  <section id="tab-blueprints" data-panel hidden class="space-y-4">
+    <div class="flex items-center gap-3 flex-wrap">
+      <h2 class="font-display text-cyan text-sm eve-label">BPO Gap Analysis</h2>
+      <div class="flex" role="tablist" aria-label="Blueprint level">
+        <button class="subtab" data-subbtn="blueprints:pilot" aria-selected="true">Pilot</button>
+        <button class="subtab" data-subbtn="blueprints:corp"  aria-selected="false">Corp</button>
+      </div>
+      <span class="text-[11px] text-dim">SDE target set minus owned BPOs (qty = −1)</span>
+      <div data-sorter="blueprints" class="flex items-center gap-2 ml-auto"></div>
+    </div>
+
+    <div data-sub="blueprints:pilot" class="space-y-2">
+      <div class="flex items-center gap-3 text-[11px] eve-label">
+        <span class="text-green">OWNED <b id="bpo-owned-pilot">0</b></span>
+        <span class="text-red">MISSING <b id="bpo-missing-pilot">0</b></span>
+        <span class="text-dim">TARGET <b id="bpo-total-pilot">0</b></span>
+      </div>
+      <div class="bracket overflow-auto max-h-[64vh]">
+        <table>
+          <thead><tr><th>Blueprint (Missing BPO)</th><th>Hull Class</th><th>Type ID</th><th>Status</th></tr></thead>
+          <tbody id="bpo-body-pilot"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div data-sub="blueprints:corp" hidden class="space-y-2">
+      <div class="flex items-center gap-3 text-[11px] eve-label">
+        <span class="text-green">OWNED <b id="bpo-owned-corp">0</b></span>
+        <span class="text-red">MISSING <b id="bpo-missing-corp">0</b></span>
+        <span class="text-dim">TARGET <b id="bpo-total-corp">0</b></span>
+      </div>
+      <div class="bracket overflow-auto max-h-[64vh]">
+        <table>
+          <thead><tr><th>Blueprint (Missing BPO)</th><th>Hull Class</th><th>Type ID</th><th>Status</th></tr></thead>
+          <tbody id="bpo-body-corp"></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- ---------- TAB 3: PRODUCTION ---------- -->
+  <section id="tab-production" data-panel hidden class="space-y-4">
+    <div class="flex items-center gap-3 flex-wrap">
+      <h2 class="font-display text-cyan text-sm eve-label">Production Lines</h2>
+      <div class="flex" role="tablist" aria-label="Production level">
+        <button class="subtab" data-subbtn="production:pilot" aria-selected="true">Pilot</button>
+        <button class="subtab" data-subbtn="production:corp"  aria-selected="false">Corp</button>
+      </div>
+      <span class="text-[11px] text-dim">Active manufacturing jobs</span>
+      <div data-sorter="production" class="flex items-center gap-2 ml-auto"></div>
+    </div>
+
+    <div data-sub="production:pilot" class="space-y-2">
+      <div class="bracket overflow-auto max-h-[68vh]">
+        <table>
+          <thead><tr><th>Output</th><th class="text-right">Runs / Qty</th><th>Owner</th><th>Facility</th><th>Activity</th><th class="text-right">Delivers In</th></tr></thead>
+          <tbody id="prod-body-pilot"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div data-sub="production:corp" hidden class="space-y-2">
+      <div class="bracket overflow-auto max-h-[68vh]">
+        <table>
+          <thead><tr><th>Output</th><th class="text-right">Runs / Qty</th><th>Owner</th><th>Facility</th><th>Activity</th><th class="text-right">Delivers In</th></tr></thead>
+          <tbody id="prod-body-corp"></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- ---------- TAB 4: FUEL & DECOMMISSION ---------- -->
+  <section id="tab-fuel" data-panel hidden class="space-y-4">
+    <div class="flex items-center gap-3 flex-wrap">
+      <h2 class="font-display text-cyan text-sm eve-label">Fuel &amp; Decommission</h2>
+      <div class="flex" role="tablist" aria-label="Structure level">
+        <button class="subtab" data-subbtn="fuel:pilot" aria-selected="false">Pilot</button>
+        <button class="subtab" data-subbtn="fuel:corp"  aria-selected="true">Corp</button>
+      </div>
+    </div>
+
+    <div data-sub="fuel:pilot" hidden>
+      <div class="bracket px-4 py-8 text-center text-dim text-xs eve-label">
+        Upwell structures (citadels, refineries, Metenox) are corporation-owned.<br>
+        Switch to <span class="text-green">Corp</span> and connect a director to view fuel &amp; decommission data.
+      </div>
+    </div>
+
+    <div data-sub="fuel:corp" class="space-y-6">
+      <!-- constellation filter -->
+      <div class="flex items-center gap-3 flex-wrap border-b border-line pb-3">
+        <span class="text-[11px] text-cyan eve-label">◈ CONSTELLATION</span>
+        <select id="constellation-filter" class="bg-panel border border-line text-ink text-xs px-2 py-1.5 eve-label focus:border-cyan">
+          <option value="all">ALL CONSTELLATIONS</option>
+        </select>
+        <span class="text-[11px] text-dim">Scopes decommission, fuel &amp; Metenox tables below</span>
+      </div>
+
+      <!-- 4A decommission -->
+      <div class="space-y-3">
+        <div id="unanchor-banner" class="bracket border-red bg-red/10 px-4 py-3 hidden">
+          <div class="flex items-center gap-3 flex-wrap">
+            <span class="font-display text-red text-sm eve-label crit-pulse">⚠ STRUCTURE DECOMMISSION IN PROGRESS</span>
+            <span id="unanchor-detail" class="text-red text-xs"></span>
+            <span class="ml-auto font-display text-red text-lg" data-countdown id="unanchor-timer">--:--:--</span>
+          </div>
+        </div>
+        <div class="flex items-center gap-3 flex-wrap">
+          <h3 class="font-display text-cyan text-sm eve-label">Decommission Monitor</h3>
+          <span class="text-[11px] text-dim">Structures with an active unanchor timer</span>
+        </div>
+        <div class="bracket overflow-auto max-h-[34vh]">
+          <table>
+            <thead><tr><th>Structure</th><th>System</th><th>Asset Safety</th><th class="text-right">Unanchors In</th></tr></thead>
+            <tbody id="decom-body"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- 4B fuel manager -->
+      <div class="space-y-3">
+        <div class="flex items-center gap-3 flex-wrap">
+          <h3 class="font-display text-cyan text-sm eve-label">Fuel Manager</h3>
+          <span class="text-[11px] text-dim">Forecast = Σ service-module burn × interval</span>
+          <div data-sorter="fuel" class="flex items-center gap-2 ml-auto"></div>
+        </div>
+        <div class="bracket overflow-auto max-h-[50vh]">
+          <table>
+            <thead>
+              <tr><th>Structure</th><th>System</th><th>Active Services</th><th class="text-right">Burn /hr</th><th class="text-right">Blocks Now</th><th class="text-right">Daily Target</th><th class="text-right">Weekly Target</th><th class="text-right">Monthly Target</th><th>Runs Dry</th></tr>
+            </thead>
+            <tbody id="fuel-body"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- 4C metenox -->
+      <div class="space-y-3">
+        <div class="flex items-center gap-3 flex-wrap">
+          <h3 class="font-display text-cyan text-sm eve-label">Metenox Moon Drill Monitor</h3>
+          <span class="text-[11px] text-dim">Both fuels required: Fuel Blocks (5/hr) + Magmatic Gas (55/hr)</span>
+          <span id="metenox-summary" class="text-[11px] text-amber eve-label"></span>
+          <div data-sorter="metenox" class="flex items-center gap-2 ml-auto"></div>
+        </div>
+        <div class="bracket overflow-auto max-h-[50vh]">
+          <table>
+            <thead>
+              <tr><th>Drill</th><th>Location</th><th>Fuel Type</th><th class="text-right">Remaining</th><th class="text-right">Burn /hr</th><th class="text-right">Daily Need</th><th class="text-right">Weekly Need</th><th class="text-right">Monthly Need</th><th>Runs Dry</th></tr>
+            </thead>
+            <tbody id="metenox-body"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ---------- TAB 5: IDLE REFINERIES ---------- -->
+  <section id="tab-refineries" data-panel hidden class="space-y-4">
+    <div class="flex items-center gap-3 flex-wrap">
+      <h2 class="font-display text-cyan text-sm eve-label">Idle Refineries · Exclusion Matrix</h2>
+      <div class="flex" role="tablist" aria-label="Refinery level">
+        <button class="subtab" data-subbtn="refineries:pilot" aria-selected="false">Pilot</button>
+        <button class="subtab" data-subbtn="refineries:corp"  aria-selected="true">Corp</button>
+      </div>
+      <span class="text-[11px] text-dim">Athanor + Tatara − active extractions</span>
+      <div data-sorter="refineries" class="flex items-center gap-2"></div>
+      <span id="ref-summary" class="ml-auto text-[11px] text-dim eve-label"></span>
+    </div>
+
+    <div data-sub="refineries:pilot" hidden>
+      <div class="bracket px-4 py-8 text-center text-dim text-xs eve-label">
+        Refineries are corporation-owned.<br>
+        Switch to <span class="text-green">Corp</span> and connect a director to view idle refineries.
+      </div>
+    </div>
+
+    <div data-sub="refineries:corp">
+      <div class="bracket overflow-auto max-h-[68vh]">
+        <table>
+          <thead><tr><th>Structure ID</th><th>Refinery Class</th><th>Solar System</th><th>Fuel Status</th></tr></thead>
+          <tbody id="ref-body"></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<footer class="max-w-[1500px] mx-auto px-4 py-6 text-[10px] text-dim eve-label border-t border-line mt-6">
+  FOUNDRY is an unofficial third-party tool · EVE Online &amp; ESI are trademarks of CCP hf · Not affiliated with or endorsed by CCP
+</footer>
+
+<script>
+/* =========================================================================
+ * FOUNDRY — EVE Online Industrial Overseer
+ * Single-file client-side SPA. No build step. Drop in as index.html on
+ * GitHub Pages. Runs fully offline against embedded mock data until you
+ * set CONFIG.CLIENT_ID and flip CONFIG.USE_MOCK = false.
+ * ======================================================================= */
+
+/* ----------------------------- CONFIG ---------------------------------- */
+const CONFIG = {
+  // 1) Register an app at https://developers.eveonline.com/ (type: PKCE / no secret).
+  // 2) Set the callback to the exact GitHub Pages URL hosting this file.
+  // 3) Paste the Client ID below and set USE_MOCK = false.
+  CLIENT_ID: '53aaeb1325774ece83e2f541ed1a25a7',
+  // Must EXACTLY match the callback registered at developers.eveonline.com.
+  CALLBACK_URL: 'https://novadragon22.github.io/indy/',
+  // Scopes are requested per login type so each connection only carries what it needs.
+  CHAR_SCOPES: [
+    'esi-assets.read_assets.v1',
+    'esi-characters.read_blueprints.v1',
+    'esi-industry.read_character_jobs.v1',
+    'esi-universe.read_structures.v1',
+  ],
+  CORP_SCOPES: [
+    'esi-assets.read_corporation_assets.v1',
+    'esi-corporations.read_blueprints.v1',
+    'esi-industry.read_corporation_jobs.v1',
+    'esi-corporations.read_structures.v1',
+    'esi-industry.read_corporation_mining.v1',
+    'esi-universe.read_structures.v1',
+  ],
+  AUTH_BASE: 'https://login.eveonline.com/v2/oauth/authorize',
+  TOKEN_URL: 'https://login.eveonline.com/v2/oauth/token',
+  ESI_BASE:  'https://esi.evetech.net/latest',
+  CACHE_TTL_MS: 5 * 60 * 1000, // 5 min ESI cache window
+  USE_MOCK: false,             // live ESI; auto-falls back to mock when no pilot is logged in
+};
+
+/* -------------------- STRUCTURE / SDE CONSTANTS ------------------------ */
+const REFINERY_TYPE_IDS = { 35835: 'Athanor', 35836: 'Tatara' };
+
+// Metenox Moon Drill (Equinox 2024). Burns fuel blocks AND Magmatic Gas.
+// Rates: 55 Magmatic Gas/hr and 5 fuel blocks/hr.
+const METENOX_TYPE_ID = 81826;
+const MAGMATIC_GAS_TYPE_ID = 81143;
+const METENOX_MAGMATIC_PER_HOUR = 55;
+const METENOX_FUELBLOCK_PER_HOUR = 5;
+
+// Fuel-block burn per hour by service module (representative values).
+const SERVICE_BURN = {
+  'Reprocessing':        10, 'Moon Drilling':      5,  'Manufacturing':   12,
+  'Research':            6,  'Invention':          8,  'Market':          40,
+  'Clone Bay':           15, 'Cynosural Jammer':   30, 'Composite Reactor': 15,
+};
+
+// Tech 1 subcapital hull BPO target set (the gap-analysis "should own" list).
+// NOTE: type_id below are the BLUEPRINT type_ids ESI returns. Verify against the
+// current SDE (fuzzwork / CCP SDE) before going live — they are easy to mistype.
+const SDE_T1_SHIP_BPOS = [
+  { type_id: 957,   name: 'Merlin Blueprint',     hull: 'Frigate'    },
+  { type_id: 939,   name: 'Incursus Blueprint',   hull: 'Frigate'    },
+  { type_id: 944,   name: 'Punisher Blueprint',   hull: 'Frigate'    },
+  { type_id: 949,   name: 'Rifter Blueprint',     hull: 'Frigate'    },
+  { type_id: 977,   name: 'Vexor Blueprint',      hull: 'Cruiser'    },
+  { type_id: 972,   name: 'Caracal Blueprint',    hull: 'Cruiser'    },
+  { type_id: 2363,  name: 'Omen Blueprint',       hull: 'Cruiser'    },
+  { type_id: 967,   name: 'Stabber Blueprint',    hull: 'Cruiser'    },
+  { type_id: 24699, name: 'Drake Blueprint',      hull: 'Battlecruiser' },
+  { type_id: 16230, name: 'Brutix Blueprint',     hull: 'Battlecruiser' },
+  { type_id: 24703, name: 'Hurricane Blueprint',  hull: 'Battlecruiser' },
+  { type_id: 24697, name: 'Harbinger Blueprint',  hull: 'Battlecruiser' },
+  { type_id: 691,   name: 'Raven Blueprint',      hull: 'Battleship' },
+  { type_id: 24689, name: 'Rokh Blueprint',       hull: 'Battleship' },
+  { type_id: 24693, name: 'Abaddon Blueprint',    hull: 'Battleship' },
+  { type_id: 24683, name: 'Maelstrom Blueprint',  hull: 'Battleship' },
+];
+
+/* ============================ MOCK DATA =============================== *
+ * Shaped exactly like the normalized objects the ESI layer produces, so
+ * the engines below run identically against mock or live data.
+ * ===================================================================== */
+const inFuture = (h, m = 0) => new Date(Date.now() + (h * 3600 + m * 60) * 1000).toISOString();
+
+const MOCK_CHARACTERS = [
+  { id: 91000001, name: 'Vael Korrin' },
+  { id: 91000002, name: 'Tessa Dren' },
+  { id: 98000777, name: 'BLACK SUN INDUSTRIES', corp: true },
+];
+
+const MOCK_ASSETS = [
+  { name: 'Tritanium',                tier: 'T1',      qty: 4250000, owner: 'BLACK SUN INDUSTRIES', isCorp: true,  system: 'Jita',     station: 'Jita IV - Moon 4 - Caldari Navy Assembly Plant', hangar: 'Corp Hangar 2 (Minerals)' },
+  { name: 'Mexallon',                 tier: 'T1',      qty: 880000,  owner: 'BLACK SUN INDUSTRIES', isCorp: true,  system: 'Jita',     station: 'Jita IV - Moon 4 - Caldari Navy Assembly Plant', hangar: 'Corp Hangar 2 (Minerals)' },
+  { name: 'Caracal',                  tier: 'T1',      qty: 12,      owner: 'Vael Korrin',          isCorp: false, system: 'Dodixie',  station: 'Dodixie IX - Moon 20 - FNAP',                    hangar: 'Hangar' },
+  { name: 'Caracal Navy Issue',       tier: 'Faction', qty: 2,       owner: 'Vael Korrin',          isCorp: false, system: 'Dodixie',  station: 'Dodixie IX - Moon 20 - FNAP',                    hangar: 'Ship Hangar' },
+  { name: 'Damage Control II',        tier: 'T2',      qty: 340,     owner: 'Tessa Dren',           isCorp: false, system: 'Amarr',    station: 'Amarr VIII (Oris) - Emperor Family Academy',     hangar: 'Hangar' },
+  { name: 'Imperial Navy Multifreq.', tier: 'Faction', qty: 96,      owner: 'Tessa Dren',           isCorp: false, system: 'Amarr',    station: 'Amarr VIII (Oris) - Emperor Family Academy',     hangar: 'Hangar' },
+  { name: 'Loki',                     tier: 'T3',      qty: 1,        owner: 'Vael Korrin',          isCorp: false, system: 'Hek',      station: 'Hek VIII - Moon 12 - Boundless Creation',        hangar: 'Ship Hangar' },
+  { name: 'Gist X-Type Shield Boost', tier: 'Officer', qty: 1,       owner: 'Vael Korrin',          isCorp: false, system: 'Hek',      station: 'Hek VIII - Moon 12 - Boundless Creation',        hangar: 'Hangar' },
+  { name: 'Nanite Repair Paste',      tier: 'T1',      qty: 5000,    owner: 'Tessa Dren',           isCorp: false, system: 'Amarr',    station: 'Amarr VIII (Oris) - Emperor Family Academy',     hangar: 'Hangar' },
+  { name: 'Warrior II',               tier: 'T2',      qty: 250,     owner: 'BLACK SUN INDUSTRIES', isCorp: true,  system: 'Sobaseki',  station: 'Sobaseki II - Athanor [BSI Refine-01]',          hangar: 'Corp Hangar 4 (Drones)' },
+  { name: 'Helium Isotopes',          tier: 'T1',      qty: 120000,  owner: 'BLACK SUN INDUSTRIES', isCorp: true,  system: 'Sobaseki',  station: 'Sobaseki II - Athanor [BSI Refine-01]',          hangar: 'Fuel Bay' },
+  { name: 'Vexor',                    tier: 'T1',      qty: 5,       owner: 'Vael Korrin',          isCorp: false, system: 'Dodixie',  station: 'Dodixie IX - Moon 20 - FNAP',                    hangar: 'Ship Hangar' },
+];
+
+// Live blueprint inventory. quantity === -1 means BPO (original); >0 means BPC stack.
+const MOCK_BLUEPRINTS = [
+  { type_id: 957,   name: 'Merlin Blueprint',    quantity: -1, owner: 'Vael Korrin',          isCorp: false },
+  { type_id: 939,   name: 'Incursus Blueprint',  quantity: -1, owner: 'Vael Korrin',          isCorp: false },
+  { type_id: 977,   name: 'Vexor Blueprint',     quantity: -1, owner: 'BLACK SUN INDUSTRIES', isCorp: true  },
+  { type_id: 972,   name: 'Caracal Blueprint',   quantity: -1, owner: 'BLACK SUN INDUSTRIES', isCorp: true  },
+  { type_id: 691,   name: 'Raven Blueprint',     quantity: -1, owner: 'Tessa Dren',           isCorp: false },
+  { type_id: 24699, name: 'Drake Blueprint',     quantity: -1, owner: 'BLACK SUN INDUSTRIES', isCorp: true  },
+  // BPC copies (quantity > 0) — must be IGNORED by the BPO engine:
+  { type_id: 944,   name: 'Punisher Blueprint',  quantity: 10, owner: 'Tessa Dren',           isCorp: false },
+  { type_id: 949,   name: 'Rifter Blueprint',    quantity: 25, owner: 'Vael Korrin',          isCorp: false },
+];
+
+const MOCK_INDUSTRY_JOBS = [
+  { output: 'Caracal',          qty: 10, owner: 'Vael Korrin',          isCorp: false, facility: 'Dodixie IX-20 - FNAP',        activity: 'Manufacturing', end_date: inFuture(2, 14) },
+  { output: 'Drake',            qty: 4,  owner: 'BLACK SUN INDUSTRIES', isCorp: true,  facility: 'Sobaseki II - Raitaru [BSI]', activity: 'Manufacturing', end_date: inFuture(11, 5) },
+  { output: 'Vexor Blueprint',  qty: 1,  owner: 'BLACK SUN INDUSTRIES', isCorp: true,  facility: 'Sobaseki II - Raitaru [BSI]', activity: 'Material Research', end_date: inFuture(0, 47) },
+  { output: 'Damage Control II',qty: 200,owner: 'Tessa Dren',           isCorp: false, facility: 'Amarr VIII - EFA',            activity: 'Manufacturing', end_date: inFuture(0, 3) },
+  { output: 'Warrior II',       qty: 500,owner: 'BLACK SUN INDUSTRIES', isCorp: true,  facility: 'Sobaseki II - Athanor',       activity: 'Manufacturing', end_date: inFuture(33, 0) },
+];
+
+const MOCK_STRUCTURES = [
+  { id: 1035001, name: 'BSI Refine-01',  type: 'Athanor',  system: 'Sobaseki', constellation: 'Kimotoro',  services: ['Reprocessing','Moon Drilling'],           fuel_blocks: 9200,  unanchors_at: null },
+  { id: 1035002, name: 'BSI Forge',      type: 'Raitaru',  system: 'Sobaseki', constellation: 'Kimotoro',  services: ['Manufacturing','Research','Invention'],   fuel_blocks: 1400,  unanchors_at: null },
+  { id: 1035003, name: 'BSI Citadel',    type: 'Astrahus', system: 'Hek',      constellation: 'Sirseshin', services: ['Market','Clone Bay'],                     fuel_blocks: 60000, unanchors_at: null },
+  { id: 1035004, name: 'Old Outpost',    type: 'Astrahus', system: 'Renarelle',constellation: 'Coriault',  services: ['Clone Bay'],                              fuel_blocks: 300,   unanchors_at: inFuture(7, 42) }, // DECOMMISSIONING
+];
+
+// Metenox Moon Drills — track BOTH fuel blocks and Magmatic Gas (lowsec/null/WH only).
+const MOCK_METENOX = [
+  { structure_id: 1050001, name: 'BSI Drill-Alpha', system: 'Tama',    constellation: 'Okkelen', fuel_blocks: 12000, magmatic: 410000, product: 'Loparite (R32)' },
+  { structure_id: 1050002, name: 'BSI Drill-Beta',  system: 'Tama',    constellation: 'Okkelen', fuel_blocks: 9000,  magmatic: 92000,  product: 'Cobaltite (R16)' },
+  { structure_id: 1050003, name: 'BSI Drill-Gamma', system: 'Amamake', constellation: 'Hed',     fuel_blocks: 200,   magmatic: 12000,  product: 'Scheelite (R16)' },
+  { structure_id: 1050004, name: 'BSI Drill-Delta', system: 'Rancer',  constellation: 'Inolari', fuel_blocks: 5000,  magmatic: 0,      product: 'Zeolites (R4)' },
+];
+
+// Corp structures (refinery filter source) + the active extraction log.
+const MOCK_CORP_STRUCTURES = [
+  { structure_id: 1040001, type_id: 35835, system: 'Sobaseki',  fuel_blocks: 9200 },
+  { structure_id: 1040002, type_id: 35836, system: 'Aydoteaux', fuel_blocks: 220  },
+  { structure_id: 1040003, type_id: 35835, system: 'Renyn',     fuel_blocks: 0    },
+  { structure_id: 1040004, type_id: 35836, system: 'Frarn',     fuel_blocks: 4100 },
+  { structure_id: 1040005, type_id: 35835, system: 'Eystur',    fuel_blocks: 1500 },
+  { structure_id: 1040006, type_id: 16213, system: 'Jita',      fuel_blocks: 9999 }, // NOT a refinery → excluded by type filter
+];
+const MOCK_ACTIVE_EXTRACTIONS = [
+  { structure_id: 1040001 }, // mining now → excluded from idle view
+  { structure_id: 1040004 }, // mining now → excluded
+];
+
+/* ====================== ESI / OAUTH (PKCE) LAYER ====================== *
+ * Fully scaffolded native PKCE flow + per-character token storage and a
+ * TTL cache, all in localStorage. Dormant while USE_MOCK = true.
+ * ===================================================================== */
+const Store = {
+  k: (s) => 'foundry:' + s,
+  get(s)      { try { return JSON.parse(localStorage.getItem(this.k(s))); } catch { return null; } },
+  set(s, v)   { localStorage.setItem(this.k(s), JSON.stringify(v)); },
+  del(s)      { localStorage.removeItem(this.k(s)); },
+};
+
+function cacheGet(key) {
+  const e = Store.get('cache:' + key);
+  if (!e) return null;
+  if (Date.now() - e.t > CONFIG.CACHE_TTL_MS) { Store.del('cache:' + key); return null; }
+  return e.v;
+}
+function cacheSet(key, v) { Store.set('cache:' + key, { t: Date.now(), v }); }
+
+// --- PKCE helpers ---
+function b64url(buf) {
+  return btoa(String.fromCharCode(...new Uint8Array(buf))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+}
+async function sha256(str) { return crypto.subtle.digest('SHA-256', new TextEncoder().encode(str)); }
+function randStr(n = 48) { return b64url(crypto.getRandomValues(new Uint8Array(n))); }
+
+async function beginLogin(mode) {
+  mode = (mode === 'corp') ? 'corp' : 'character';
+  if (!CONFIG.CLIENT_ID) {
+    alert('Set CONFIG.CLIENT_ID (and USE_MOCK = false) to enable EVE SSO. Currently running on embedded mock data.');
+    return;
+  }
+  const scopes = mode === 'corp' ? CONFIG.CORP_SCOPES : CONFIG.CHAR_SCOPES;
+  const verifier  = randStr(48);
+  const challenge = b64url(await sha256(verifier));
+  const state     = randStr(16);
+  Store.set('pkce', { verifier, state, mode });
+  const u = new URL(CONFIG.AUTH_BASE);
+  u.search = new URLSearchParams({
+    response_type: 'code', redirect_uri: CONFIG.CALLBACK_URL, client_id: CONFIG.CLIENT_ID,
+    scope: scopes.join(' '), code_challenge: challenge, code_challenge_method: 'S256', state,
+  }).toString();
+  location.assign(u.toString());
+}
+
+async function handleCallback() {
+  const p = new URLSearchParams(location.search);
+  const code = p.get('code'); const state = p.get('state');
+  if (!code) return false;
+  const pkce = Store.get('pkce');
+  if (!pkce || pkce.state !== state) { console.warn('PKCE state mismatch'); return false; }
+  try {
+    const res = await fetch(CONFIG.TOKEN_URL, {
+      method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        grant_type: 'authorization_code', code, client_id: CONFIG.CLIENT_ID, code_verifier: pkce.verifier,
+      }),
+    });
+    const tok = await res.json();
+    const claims = JSON.parse(atob(tok.access_token.split('.')[1]));
+    const charId = String(claims.sub).split(':').pop();
+    const mode = pkce.mode === 'corp' ? 'corp' : 'character';
+    const scopes = [].concat(claims.scp || []);
+    const conns = Store.get('conns') || {};
+    // Keyed by charId:mode so one character can hold both a character and a corp connection.
+    conns[charId + ':' + mode] = { charId, name: claims.name, mode, scopes, ...tok, expires_at: Date.now() + tok.expires_in * 1000 };
+    Store.set('conns', conns);
+    Store.del('pkce');
+    history.replaceState({}, '', CONFIG.CALLBACK_URL); // strip ?code= from URL
+    return true;
+  } catch (e) { console.error('Token exchange failed', e); return false; }
+}
+
+// Connection helpers.
+const allConns  = () => Object.entries(Store.get('conns') || {}); // [[connId, conn], ...]
+const charConns = () => allConns().filter(([, c]) => c.mode === 'character');
+const corpConns = () => allConns().filter(([, c]) => c.mode === 'corp');
+function loggedIn() { return allConns().length > 0; }
+function hasChar()  { return charConns().length > 0; }
+function hasCorp()  { return corpConns().length > 0; }
+
+async function validToken(connId) {
+  const conns = Store.get('conns') || {};
+  const c = conns[connId];
+  if (!c) return null;
+  if (Date.now() < c.expires_at - 30000) return c.access_token;
+  const res = await fetch(CONFIG.TOKEN_URL, {
+    method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({ grant_type: 'refresh_token', refresh_token: c.refresh_token, client_id: CONFIG.CLIENT_ID }),
+  });
+  const tok = await res.json();
+  conns[connId] = { ...c, ...tok, expires_at: Date.now() + tok.expires_in * 1000 };
+  Store.set('conns', conns);
+  return tok.access_token;
+}
+
+// Raw fetch with optional auth + page param; surfaces X-Pages for pagination.
+async function esiRaw(path, token, page) {
+  const url = CONFIG.ESI_BASE + path + (page ? (path.includes('?') ? '&' : '?') + 'page=' + page : '');
+  const res = await fetch(url, { headers: token ? { Authorization: 'Bearer ' + token } : {} });
+  if (!res.ok) throw new Error('ESI ' + res.status + ' on ' + path);
+  return { data: await res.json(), pages: parseInt(res.headers.get('X-Pages') || '1', 10) };
+}
+
+// Single object endpoint (cached). connId null = public, no auth.
+async function esiGet(connId, path) {
+  const ck = (connId || 'pub') + ':' + path;
+  const hit = cacheGet(ck); if (hit) return hit;
+  const token = connId ? await validToken(connId) : null;
+  const { data } = await esiRaw(path, token, null);
+  cacheSet(ck, data);
+  return data;
+}
+
+// Array endpoint with automatic pagination (cached).
+async function esiAll(connId, path) {
+  const ck = (connId || 'pub') + ':all:' + path;
+  const hit = cacheGet(ck); if (hit) return hit;
+  const token = connId ? await validToken(connId) : null;
+  const first = await esiRaw(path, token, 1);
+  let all = Array.isArray(first.data) ? first.data : [];
+  for (let p = 2; p <= first.pages; p++) {
+    const next = await esiRaw(path, token, p);
+    all = all.concat(next.data);
+  }
+  cacheSet(ck, all);
+  return all;
+}
+
+// POST /universe/names/ — public batch id→name (NEVER pass player structure ids here).
+async function esiPostNames(ids) {
+  const res = await fetch(CONFIG.ESI_BASE + '/universe/names/', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(ids),
+  });
+  if (!res.ok) throw new Error('ESI ' + res.status + ' on /universe/names/');
+  return res.json();
+}
+
+// Permanent name cache (names don't change) backed by localStorage.
+const NameCache = {};
+async function resolveNames(rawIds) {
+  const ids = [...new Set(rawIds.filter(Boolean).map(Number))];
+  ids.forEach(id => { if (!(id in NameCache)) { const c = Store.get('name:' + id); if (c) NameCache[id] = c; } });
+  const todo = ids.filter(id => !(id in NameCache));
+  for (let i = 0; i < todo.length; i += 1000) {
+    try {
+      const r = await esiPostNames(todo.slice(i, i + 1000));
+      r.forEach(o => { NameCache[o.id] = o.name; Store.set('name:' + o.id, o.name); });
+    } catch (e) { console.warn('name resolve batch failed', e); }
+  }
+  return NameCache;
+}
+
+// Resolve a root location id → { system, place }. Handles NPC stations,
+// player structures (auth), and raw solar systems.
+const _placeCache = {};
+async function resolvePlace(authCharId, rootId, rootType) {
+  if (_placeCache[rootId]) return _placeCache[rootId];
+  let out = { system: '—', place: 'Unknown' };
+  try {
+    if (rootType === 'solar_system') {
+      await resolveNames([rootId]);
+      out = { system: NameCache[rootId] || ('System ' + rootId), place: 'In space / POS' };
+    } else if (rootType === 'station') {
+      const st = await esiGet(null, '/universe/stations/' + rootId + '/');
+      await resolveNames([st.system_id]);
+      out = { system: NameCache[st.system_id] || ('System ' + st.system_id), place: st.name };
+    } else if (rootType === 'structure' || rootType === 'item') {
+      // Player-owned structure — needs docking access; may 403.
+      const sv = await esiGet(authCharId, '/universe/structures/' + rootId + '/');
+      await resolveNames([sv.solar_system_id]);
+      out = { system: NameCache[sv.solar_system_id] || ('System ' + sv.solar_system_id), place: sv.name };
+    }
+  } catch (e) { out = { system: '—', place: 'ID ' + rootId + ' (no access)' }; }
+  _placeCache[rootId] = out;
+  return out;
+}
+
+// solar_system_id → constellation name (cached).
+const _constCache = {};
+async function constellationOf(systemId) {
+  if (!systemId) return '—';
+  if (_constCache[systemId]) return _constCache[systemId];
+  try {
+    const sys = await esiGet(null, '/universe/systems/' + systemId + '/');
+    await resolveNames([sys.constellation_id]);
+    _constCache[systemId] = NameCache[sys.constellation_id] || ('Const ' + sys.constellation_id);
+  } catch (e) { _constCache[systemId] = '—'; }
+  return _constCache[systemId];
+}
+
+// location_flag → human hangar/container label.
+function flagLabel(flag) {
+  if (!flag) return '—';
+  const m = flag.match(/^CorpSAG(\d)$/);
+  if (m) return 'Corp Hangar ' + m[1];
+  return ({ Hangar: 'Hangar', ShipHangar: 'Ship Hangar', FuelBay: 'Fuel Bay', AssetSafety: 'Asset Safety' }[flag]) || flag;
+}
+
+// Tier/variant requires the SDE metaGroup (not exposed by ESI). Honest placeholder
+// until you bundle a type_id→metaGroup map; swap this for a lookup when you do.
+function metaTier(/* typeId */) { return '—'; }
+
+// EVE industry activity_id → label.
+const ACTIVITY = { 1: 'Manufacturing', 3: 'Time Research', 4: 'Material Research', 5: 'Copying', 7: 'Reverse Engineering', 8: 'Invention', 9: 'Reactions' };
+
+/* -------------------- DATA PROVIDERS (mock | live) -------------------- *
+ * Each returns the normalized shapes the render layer expects. When you
+ * go live, replace the mock branch bodies with esi() calls + your own
+ * SDE name resolution; the render code does not change.
+ * ------------------------------------------------------------------- */
+/* -------------------- DATA PROVIDERS (live | mock) -------------------- *
+ * Live branches hit ESI and normalize to the exact shapes the render layer
+ * expects. Each is wrapped so one failing endpoint (e.g. a 403 on corp data
+ * without Director role) never blanks the whole app. When no pilot is logged
+ * in — or CONFIG.USE_MOCK is true — the embedded mock data is served instead.
+ * ------------------------------------------------------------------- */
+const useMock = () => CONFIG.USE_MOCK || !loggedIn();
+
+// Iterate character-mode connections (pilot-level endpoints).
+async function perChar(fn) {
+  for (const [connId, c] of charConns()) {
+    try { await fn(connId, c.charId, c.name); }
+    catch (e) { console.warn('perChar', connId, e); }
+  }
+}
+
+// Iterate one distinct corp per corp-mode connection (dedup by corp_id).
+async function perCorp(fn) {
+  const seen = new Set();
+  for (const [connId, c] of corpConns()) {
+    try {
+      const pub = await esiGet(connId, '/characters/' + c.charId + '/');
+      const cid = pub.corporation_id;
+      if (!cid || seen.has(cid)) continue;
+      seen.add(cid);
+      await resolveNames([cid]);
+      await fn(connId, cid, NameCache[cid] || ('Corp ' + cid));
+    } catch (e) { console.warn('perCorp', connId, e); }
+  }
+}
+
+const Data = {
+  async characters() {
+    if (useMock()) return MOCK_CHARACTERS;
+    return charConns().map(([, c]) => ({ id: c.charId, name: c.name }));
+  },
+
+  async assets() {
+    if (useMock()) return MOCK_ASSETS;
+    const rows = [];
+    const pushAll = async (assets, connId, owner, isCorp) => {
+      if (!assets || !assets.length) return;
+      const byId = {}; assets.forEach(a => byId[a.item_id] = a);
+      await resolveNames(assets.map(a => a.type_id));
+      for (const a of assets) {
+        let loc = a, guard = 0;
+        while (loc.location_type === 'item' && byId[loc.location_id] && guard++ < 64) loc = byId[loc.location_id];
+        const { system, place } = await resolvePlace(connId, loc.location_id, loc.location_type);
+        rows.push({
+          name: NameCache[a.type_id] || ('Type ' + a.type_id),
+          tier: metaTier(a.type_id), qty: a.quantity, owner, isCorp: !!isCorp,
+          system, station: place, hangar: flagLabel(a.location_flag),
+        });
+      }
+    };
+    await perChar(async (connId, charId, name) => {
+      try { await pushAll(await esiAll(connId, '/characters/' + charId + '/assets/'), connId, name, false); }
+      catch (e) { console.warn('char assets', connId, e); }
+    });
+    await perCorp(async (connId, cid, cname) => {
+      try { await pushAll(await esiAll(connId, '/corporations/' + cid + '/assets/'), connId, cname, true); }
+      catch (e) { console.warn('corp assets', cid, e); }
+    });
+    return rows;
+  },
+
+  async blueprints() {
+    if (useMock()) return MOCK_BLUEPRINTS;
+    const out = [];
+    const add = async (bps, owner, isCorp) => {
+      if (!bps || !bps.length) return;
+      await resolveNames(bps.map(b => b.type_id));
+      bps.forEach(b => out.push({ type_id: b.type_id, name: NameCache[b.type_id] || ('Type ' + b.type_id), quantity: b.quantity, owner, isCorp: !!isCorp }));
+    };
+    await perChar(async (connId, charId, name) => {
+      try { await add(await esiAll(connId, '/characters/' + charId + '/blueprints/'), name, false); }
+      catch (e) { console.warn('char bp', connId, e); }
+    });
+    await perCorp(async (connId, cid, cname) => {
+      try { await add(await esiAll(connId, '/corporations/' + cid + '/blueprints/'), cname, true); }
+      catch (e) { console.warn('corp bp', cid, e); }
+    });
+    return out;
+  },
+
+  async industryJobs() {
+    if (useMock()) return MOCK_INDUSTRY_JOBS;
+    const out = [];
+    const add = async (jobs, connId, owner, isCorp) => {
+      if (!jobs || !jobs.length) return;
+      const active = jobs.filter(j => !j.status || j.status === 'active');
+      await resolveNames(active.map(j => j.product_type_id || j.blueprint_type_id));
+      for (const j of active) {
+        const tid = j.product_type_id || j.blueprint_type_id;
+        const fac = await resolvePlace(connId, j.facility_id || j.station_id || j.location_id, 'structure');
+        out.push({
+          output: NameCache[tid] || ('Type ' + tid), qty: j.runs, owner, isCorp: !!isCorp,
+          facility: fac.place, activity: ACTIVITY[j.activity_id] || ('Activity ' + j.activity_id),
+          end_date: j.end_date,
+        });
+      }
+    };
+    await perChar(async (connId, charId, name) => {
+      try { await add(await esiAll(connId, '/characters/' + charId + '/industry/jobs/'), connId, name, false); }
+      catch (e) { console.warn('char jobs', connId, e); }
+    });
+    await perCorp(async (connId, cid, cname) => {
+      try { await add(await esiAll(connId, '/corporations/' + cid + '/industry/jobs/'), connId, cname, true); }
+      catch (e) { console.warn('corp jobs', cid, e); }
+    });
+    return out;
+  },
+
+  // Shared raw corp-structure fetch, normalized once and reused by tabs 4 + 5.
+  async _rawStructures() {
+    const out = [];
+    await perCorp(async (connId, cid) => {
+      let list = [];
+      try { list = await esiAll(connId, '/corporations/' + cid + '/structures/'); }
+      catch (e) { console.warn('corp structures', cid, e); return; }
+      await resolveNames(list.flatMap(s => [s.type_id, s.system_id]));
+      list.forEach(s => out.push(Object.assign({ _connId: connId }, s)));
+    });
+    return out;
+  },
+
+  async structures() {
+    if (useMock()) return MOCK_STRUCTURES;
+    const raw = await this._rawStructures();
+    const out = [];
+    for (const s of raw) {
+      if (s.type_id === METENOX_TYPE_ID) continue; // Metenox handled by its own monitor
+      const services = (s.services || []).filter(sv => sv.state === 'online').map(sv => sv.name);
+      const burn = services.reduce((a, m) => a + (SERVICE_BURN[m] || 0), 0);
+      const hoursLeft = s.fuel_expires ? Math.max(0, (new Date(s.fuel_expires).getTime() - Date.now()) / 3.6e6) : 0;
+      out.push({
+        id: s.structure_id, name: s.name || NameCache[s.type_id] || ('Structure ' + s.structure_id),
+        type: NameCache[s.type_id] || ('Type ' + s.type_id),
+        system: NameCache[s.system_id] || ('System ' + s.system_id),
+        constellation: await constellationOf(s.system_id),
+        services, fuel_blocks: Math.round(hoursLeft * burn), unanchors_at: s.unanchors_at || null,
+      });
+    }
+    return out;
+  },
+
+  // Metenox Moon Drills — both fuel types. ESI exposes fuel_expires (fuel-block
+  // bay). Magmatic gas isn't directly in the structures endpoint, so we estimate
+  // remaining gas from the same expiry window; for an exact count read the fuel
+  // bay via /corporations/{cid}/assets/ (Magmatic Gas type_id).
+  async metenox() {
+    if (useMock()) return MOCK_METENOX;
+    const raw = await this._rawStructures();
+    const out = [];
+    for (const s of raw) {
+      if (s.type_id !== METENOX_TYPE_ID) continue;
+      const hoursLeft = s.fuel_expires ? Math.max(0, (new Date(s.fuel_expires).getTime() - Date.now()) / 3.6e6) : 0;
+      out.push({
+        structure_id: s.structure_id,
+        name: s.name || ('Metenox ' + s.structure_id),
+        system: NameCache[s.system_id] || ('System ' + s.system_id),
+        constellation: await constellationOf(s.system_id),
+        fuel_blocks: Math.round(hoursLeft * METENOX_FUELBLOCK_PER_HOUR),
+        magmatic: Math.round(hoursLeft * METENOX_MAGMATIC_PER_HOUR),
+        product: '—',
+      });
+    }
+    return out;
+  },
+
+  async corpStructures() {
+    if (useMock()) return MOCK_CORP_STRUCTURES;
+    const raw = await this._rawStructures();
+    return raw.map(s => {
+      const services = (s.services || []).filter(sv => sv.state === 'online').map(sv => sv.name);
+      const burn = services.reduce((a, m) => a + (SERVICE_BURN[m] || 0), 0);
+      const hoursLeft = s.fuel_expires ? Math.max(0, (new Date(s.fuel_expires).getTime() - Date.now()) / 3.6e6) : 0;
+      return { structure_id: s.structure_id, type_id: s.type_id, system: NameCache[s.system_id] || ('System ' + s.system_id), fuel_blocks: Math.round(hoursLeft * burn) };
+    });
+  },
+
+  async activeExtractions() {
+    if (useMock()) return MOCK_ACTIVE_EXTRACTIONS;
+    const out = [];
+    await perCorp(async (authId, cid) => {
+      try {
+        const ex = await esiAll(authId, '/corporation/' + cid + '/mining/extractions/'); // note: singular "corporation"
+        const now = Date.now();
+        ex.filter(e => new Date(e.natural_decay_time || e.chunk_arrival_time).getTime() > now)
+          .forEach(e => out.push({ structure_id: e.structure_id }));
+      } catch (e) { console.warn('extractions', cid, e); }
+    });
+    return out;
+  },
+};
+
+/* ============================ RENDER ================================= */
+const $  = (s) => document.querySelector(s);
+const $$ = (s) => Array.from(document.querySelectorAll(s));
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const tierClass = (t) => 'pill pill-' + ({'T1':'t1','T2':'t2','Faction':'faction','T3':'t3','Officer':'officer'}[t] || 't1');
+const nf = new Intl.NumberFormat('en-US');
+
+let CURRENT_CHAR = 'all';
+let ASSET_CACHE = [];
+let BP_CACHE = [];
+let PROD_CACHE = [];
+let STRUCT_CACHE = [];
+let METENOX_CACHE = [];
+let CURRENT_CONST = 'all';
+let CORP_STRUCT_CACHE = [];
+let EXTRACT_CACHE = [];
+
+function ownerVisible(owner) {
+  if (CURRENT_CHAR === 'all') return true;
+  return owner === CURRENT_CHAR;
+}
+
+/* -------------------------- SORT ENGINE ------------------------------ *
+ * Each table is driven by a dropdown built from its column descriptors,
+ * plus an ASC/DESC toggle. Descriptors double as the source of truth for
+ * both the sort accessor and the dropdown labels, so they never drift.
+ * ------------------------------------------------------------------- */
+const SORT = {
+  assets:     { key: 'name',         dir: 1 },
+  blueprints: { key: 'name',         dir: 1 },
+  production: { key: 'end',          dir: 1 },
+  fuel:       { key: 'dry',          dir: 1 },
+  metenox:    { key: 'dry',          dir: 1 },
+  refineries: { key: 'structure_id', dir: 1 },
+};
+
+const COLS = {
+  assets: [
+    { key: 'name',    label: 'Item Name',          type: 'str', get: a => a.name },
+    { key: 'qty',     label: 'Quantity',           type: 'num', get: a => a.qty },
+    { key: 'owner',   label: 'Owner',              type: 'str', get: a => a.owner },
+    { key: 'system',  label: 'System',             type: 'str', get: a => a.system },
+    { key: 'station', label: 'Station / Structure',type: 'str', get: a => a.station },
+    { key: 'hangar',  label: 'Hangar / Container', type: 'str', get: a => a.hangar },
+  ],
+  blueprints: [
+    { key: 'name',    label: 'Blueprint',  type: 'str', get: m => m.name },
+    { key: 'hull',    label: 'Hull Class', type: 'str', get: m => m.hull },
+    { key: 'type_id', label: 'Type ID',    type: 'num', get: m => m.type_id },
+  ],
+  production: [
+    { key: 'output',   label: 'Output',     type: 'str', get: j => j.output },
+    { key: 'qty',      label: 'Runs / Qty', type: 'num', get: j => j.qty },
+    { key: 'owner',    label: 'Owner',      type: 'str', get: j => j.owner },
+    { key: 'facility', label: 'Facility',   type: 'str', get: j => j.facility },
+    { key: 'activity', label: 'Activity',   type: 'str', get: j => j.activity },
+    { key: 'end',      label: 'Delivers In',type: 'num', get: j => new Date(j.end_date).getTime() },
+  ],
+  fuel: [
+    { key: 'name',     label: 'Structure',      type: 'str', get: s => s.name },
+    { key: 'system',   label: 'System',         type: 'str', get: s => s.system },
+    { key: 'services', label: 'Active Services',type: 'str', get: s => s.services.join(', ') },
+    { key: 'burn',     label: 'Burn /hr',       type: 'num', get: s => s._burn },
+    { key: 'blocks',   label: 'Blocks Now',     type: 'num', get: s => s.fuel_blocks },
+    { key: 'daily',    label: 'Daily Target',   type: 'num', get: s => s._daily },
+    { key: 'weekly',   label: 'Weekly Target',  type: 'num', get: s => s._weekly },
+    { key: 'monthly',  label: 'Monthly Target', type: 'num', get: s => s._monthly },
+    { key: 'dry',      label: 'Runs Dry',       type: 'num', get: s => s._hoursLeft },
+  ],
+  refineries: [
+    { key: 'structure_id', label: 'Structure ID', type: 'num', get: r => r.structure_id },
+    { key: 'class',        label: 'Refinery Class',type: 'str', get: r => REFINERY_TYPE_IDS[r.type_id] || '' },
+    { key: 'system',       label: 'Solar System',  type: 'str', get: r => r.system },
+    { key: 'fuel',         label: 'Fuel Status',   type: 'num', get: r => r.fuel_blocks },
+  ],
+  metenox: [
+    { key: 'name',          label: 'Drill',           type: 'str', get: m => m.name },
+    { key: 'system',        label: 'System',          type: 'str', get: m => m.system },
+    { key: 'constellation', label: 'Constellation',   type: 'str', get: m => m.constellation },
+    { key: 'blocks',        label: 'Fuel Blocks Left', type: 'num', get: m => m.fuel_blocks },
+    { key: 'magmatic',      label: 'Magmatic Gas Left',type: 'num', get: m => m.magmatic },
+    { key: 'dry',           label: 'Runs Dry',        type: 'num', get: m => metenoxDryHours(m) },
+    { key: 'product',       label: 'Output',          type: 'str', get: m => m.product },
+  ],
+};
+
+function sortRows(rows, tab) {
+  const st = SORT[tab];
+  const col = COLS[tab].find(c => c.key === st.key) || COLS[tab][0];
+  return [...rows].sort((a, b) => {
+    let x = col.get(a), y = col.get(b);
+    if (col.type === 'num') { x = Number(x); y = Number(y); return ((x || 0) - (y || 0)) * st.dir; }
+    return String(x).localeCompare(String(y)) * st.dir;
+  });
+}
+
+// Build a sort dropdown + direction toggle into a [data-sorter] host.
+function mountSorter(tab, onChange) {
+  const host = document.querySelector('[data-sorter="' + tab + '"]');
+  if (!host) return;
+  const st = SORT[tab];
+  host.innerHTML =
+    '<span class="text-[11px] text-dim eve-label">SORT</span>' +
+    '<select class="bg-panel border border-line text-ink text-xs px-2 py-1.5 eve-label focus:border-cyan">' +
+      COLS[tab].map(c => '<option value="' + c.key + '"' + (c.key === st.key ? ' selected' : '') + '>' + c.label + '</option>').join('') +
+    '</select>' +
+    '<button class="bracket px-2 py-1.5 eve-label text-cyan hover:bg-cyan/10 text-xs" title="Toggle direction" style="min-width:64px">' + (st.dir > 0 ? '▲ ASC' : '▼ DESC') + '</button>';
+  const sel = host.querySelector('select');
+  const btn = host.querySelector('button');
+  sel.addEventListener('change', () => { st.key = sel.value; onChange(); });
+  btn.addEventListener('click', () => { st.dir *= -1; btn.textContent = st.dir > 0 ? '▲ ASC' : '▼ DESC'; onChange(); });
+}
+
+/* ---- Tab 1: Assets + live filter + sort, split char vs corp ---- */
+function assetRow(a) {
+  return `
+    <tr>
+      <td class="text-ink">${esc(a.name)}</td>
+      <td class="text-right text-cyan">${nf.format(a.qty)}</td>
+      <td class="${a.isCorp ? 'text-amber':'text-ink'}">${esc(a.owner)}</td>
+      <td class="text-green">${esc(a.system)}</td>
+      <td class="text-dim">${esc(a.station)}</td>
+      <td class="text-dim">${esc(a.hangar)}</td>
+    </tr>`;
+}
+function renderAssets(data) {
+  if (data) ASSET_CACHE = data;
+  const q = ($('#asset-search').value || '').toLowerCase().trim();
+  const matches = a => !q || [a.name, a.owner, a.system, a.station, a.hangar, String(a.qty)]
+    .join(' ').toLowerCase().includes(q);
+  const visible = ASSET_CACHE.filter(a => ownerVisible(a.owner) && matches(a));
+  const rows = sortRows(visible, 'assets');
+
+  const charRows = rows.filter(a => !a.isCorp);
+  const corpRows = rows.filter(a => a.isCorp);
+  const empty = (n) => `<tr><td colspan="6" class="text-center text-dim py-6 eve-label">No ${n} assets match the filter</td></tr>`;
+
+  $('#asset-body-char').innerHTML = charRows.map(assetRow).join('') || empty('character');
+  $('#asset-body-corp').innerHTML = corpRows.map(assetRow).join('') || empty('corporation');
+
+  const total = ASSET_CACHE.filter(a => ownerVisible(a.owner));
+  $('#asset-count-char').textContent = charRows.length + ' / ' + total.filter(a => !a.isCorp).length + ' ITEMS';
+  $('#asset-count-corp').textContent = corpRows.length + ' / ' + total.filter(a => a.isCorp).length + ' ITEMS';
+}
+
+/* ---- Tab 2: BPO subtraction engine + sort ---- */
+function renderBlueprints(data) {
+  if (data) BP_CACHE = data;
+  const bpoRow = (m) => `
+    <tr>
+      <td class="text-ink">${esc(m.name)}</td>
+      <td class="text-dim">${esc(m.hull)}</td>
+      <td class="text-dim">${m.type_id}</td>
+      <td><span class="pill pill-officer eve-label">MISSING BPO</span></td>
+    </tr>`;
+  const renderLevel = (isCorp, suffix) => {
+    // Owned BPOs at this level = entries with quantity === -1.
+    const owned = new Set(BP_CACHE.filter(b => !!b.isCorp === isCorp && b.quantity === -1).map(b => b.type_id));
+    const missing = sortRows(SDE_T1_SHIP_BPOS.filter(s => !owned.has(s.type_id)), 'blueprints');
+    $('#bpo-owned-' + suffix).textContent   = SDE_T1_SHIP_BPOS.length - missing.length;
+    $('#bpo-missing-' + suffix).textContent = missing.length;
+    $('#bpo-total-' + suffix).textContent   = SDE_T1_SHIP_BPOS.length;
+    $('#bpo-body-' + suffix).innerHTML = missing.map(bpoRow).join('') ||
+      `<tr><td colspan="4" class="text-center text-green py-8 eve-label">All target BPOs owned — registry complete</td></tr>`;
+  };
+  renderLevel(false, 'pilot');
+  renderLevel(true,  'corp');
+}
+
+/* ---- Tab 3: Production lines + countdown + sort, split pilot/corp ---- */
+function renderProduction(data) {
+  if (data) PROD_CACHE = data;
+  const jobRow = (j) => `
+    <tr>
+      <td class="text-ink">${esc(j.output)}</td>
+      <td class="text-right text-cyan">${nf.format(j.qty)}</td>
+      <td class="${j.isCorp?'text-amber':'text-ink'}">${esc(j.owner)}</td>
+      <td class="text-dim">${esc(j.facility)}</td>
+      <td class="text-green">${esc(j.activity)}</td>
+      <td class="text-right font-display" data-countdown data-target="${j.end_date}">--:--:--</td>
+    </tr>`;
+  // Pilot jobs honour the pilot selector; corp jobs are corporation-level.
+  const pilot = sortRows(PROD_CACHE.filter(j => !j.isCorp && ownerVisible(j.owner)), 'production');
+  const corp  = sortRows(PROD_CACHE.filter(j => j.isCorp), 'production');
+  const empty = `<tr><td colspan="6" class="text-center text-dim py-8 eve-label">No active industry jobs</td></tr>`;
+  $('#prod-body-pilot').innerHTML = pilot.map(jobRow).join('') || empty;
+  $('#prod-body-corp').innerHTML  = corp.map(jobRow).join('')  || empty;
+}
+
+/* ---- Constellation filter (Tab 4) ---- */
+const inConst = (x) => CURRENT_CONST === 'all' || x.constellation === CURRENT_CONST;
+
+// Hours until a Metenox runs dry — limited by whichever fuel depletes first.
+function metenoxDryHours(m) {
+  const blockHrs = METENOX_FUELBLOCK_PER_HOUR > 0 ? m.fuel_blocks / METENOX_FUELBLOCK_PER_HOUR : Infinity;
+  const gasHrs   = METENOX_MAGMATIC_PER_HOUR  > 0 ? m.magmatic    / METENOX_MAGMATIC_PER_HOUR  : Infinity;
+  return Math.min(blockHrs, gasHrs);
+}
+
+// Rebuild the constellation dropdown from whatever data is loaded, keeping selection.
+function populateConstellations() {
+  const set = new Set();
+  STRUCT_CACHE.forEach(s => s.constellation && set.add(s.constellation));
+  METENOX_CACHE.forEach(m => m.constellation && set.add(m.constellation));
+  const sel = $('#constellation-filter');
+  const names = [...set].sort();
+  const keep = CURRENT_CONST;
+  sel.innerHTML = '<option value="all">ALL CONSTELLATIONS</option>' +
+    names.map(n => `<option value="${esc(n)}">${esc(n)}</option>`).join('');
+  sel.value = names.includes(keep) ? keep : 'all';
+  CURRENT_CONST = sel.value;
+}
+
+/* ---- Tab 4A: Decommission Monitor (constellation-scoped) ---- */
+function renderDecommission() {
+  const decom = STRUCT_CACHE.filter(s => s.unanchors_at && inConst(s))
+    .sort((a, b) => new Date(a.unanchors_at) - new Date(b.unanchors_at));
+  const banner = $('#unanchor-banner');
+  if (decom.length) {
+    const first = decom[0];
+    $('#unanchor-detail').textContent = `${first.name} (${first.type}) in ${first.system} is unanchoring`;
+    $('#unanchor-timer').setAttribute('data-target', first.unanchors_at);
+    banner.classList.remove('hidden');
+  } else {
+    $('#unanchor-timer').removeAttribute('data-target');
+    banner.classList.add('hidden');
+  }
+  $('#decom-body').innerHTML = decom.map(s => `
+    <tr>
+      <td class="text-ink">${esc(s.name)} <span class="text-dim text-[11px]">· ${esc(s.type)}</span></td>
+      <td class="text-green">${esc(s.system)}</td>
+      <td class="text-amber text-[11px] eve-label">ASSETS AT RISK</td>
+      <td class="text-right font-display stat-crit" data-countdown data-target="${s.unanchors_at}">--:--:--</td>
+    </tr>`).join('') ||
+    `<tr><td colspan="4" class="text-center text-green py-6 eve-label">No structures decommissioning</td></tr>`;
+}
+
+/* ---- Tab 4B: Fuel Manager (forecast) + sort + constellation scope ---- */
+function renderFuel(data) {
+  if (data) STRUCT_CACHE = data;
+  renderDecommission();
+  checkAlerts();
+
+  // Precompute derived fields so sorting and rendering share one source.
+  const rows = STRUCT_CACHE.filter(inConst).map(s => {
+    const burn = s.services.reduce((sum, mod) => sum + (SERVICE_BURN[mod] || 0), 0); // blocks/hr
+    const daily = burn * 24, weekly = daily * 7, monthly = daily * 30;
+    const hoursLeft = burn > 0 ? s.fuel_blocks / burn : Infinity;
+    return Object.assign({}, s, { _burn: burn, _daily: daily, _weekly: weekly, _monthly: monthly, _hoursLeft: hoursLeft });
+  });
+
+  $('#fuel-body').innerHTML = sortRows(rows, 'fuel').map(s => {
+    const hoursLeft = s._hoursLeft;
+    const dryClass = hoursLeft < 72 ? 'stat-crit' : hoursLeft < 24*7 ? 'stat-warn' : 'stat-ok';
+    const dryLabel = !isFinite(hoursLeft) ? 'No burn'
+                   : hoursLeft < 24 ? `${Math.floor(hoursLeft)}h`
+                   : `${Math.floor(hoursLeft/24)}d ${Math.floor(hoursLeft%24)}h`;
+    return `
+      <tr>
+        <td class="text-ink">${esc(s.name)} <span class="text-dim text-[11px]">· ${esc(s.type)}</span>${s.unanchors_at?' <span class="pill pill-officer eve-label">UNANCHORING</span>':''}</td>
+        <td class="text-green">${esc(s.system)}</td>
+        <td class="text-dim text-[11px]">${s.services.map(esc).join(' · ')}</td>
+        <td class="text-right text-cyan">${s._burn}</td>
+        <td class="text-right">${nf.format(s.fuel_blocks)}</td>
+        <td class="text-right text-ink">${nf.format(s._daily)}</td>
+        <td class="text-right text-ink">${nf.format(s._weekly)}</td>
+        <td class="text-right text-ink">${nf.format(s._monthly)}</td>
+        <td class="${dryClass} eve-label">${dryLabel}</td>
+      </tr>`;
+  }).join('') ||
+    `<tr><td colspan="9" class="text-center text-dim py-8 eve-label">No structures in this constellation</td></tr>`;
+}
+
+/* ---- Tab 4C: Metenox Moon Drill Monitor — BOTH fuel types ---- */
+function fuelLine(remaining, perHour) {
+  const daily = perHour * 24, weekly = daily * 7, monthly = daily * 30;
+  const hoursLeft = perHour > 0 ? remaining / perHour : Infinity;
+  const cls = remaining === 0 ? 'stat-crit' : hoursLeft < 72 ? 'stat-crit' : hoursLeft < 24*7 ? 'stat-warn' : 'stat-ok';
+  const dry = remaining === 0 ? 'DEPLETED'
+            : !isFinite(hoursLeft) ? '—'
+            : hoursLeft < 24 ? `${Math.floor(hoursLeft)}h`
+            : `${Math.floor(hoursLeft/24)}d ${Math.floor(hoursLeft%24)}h`;
+  return { daily, weekly, monthly, cls, dry };
+}
+function renderMetenox(data) {
+  if (data) METENOX_CACHE = data;
+  const drills = sortRows(METENOX_CACHE.filter(inConst), 'metenox');
+
+  let critical = 0;
+  const rowsHtml = drills.map(m => {
+    const fb  = fuelLine(m.fuel_blocks, METENOX_FUELBLOCK_PER_HOUR);
+    const gas = fuelLine(m.magmatic,    METENOX_MAGMATIC_PER_HOUR);
+    if (fb.cls === 'stat-crit' || gas.cls === 'stat-crit') critical++;
+    const loc = `${esc(m.system)} <span class="text-dim">· ${esc(m.constellation)}</span>`;
+    // Two rows per drill — one per fuel type — sharing a top border for grouping.
+    return `
+      <tr style="border-top:2px solid var(--line)">
+        <td class="text-ink" rowspan="2">${esc(m.name)}<div class="text-dim text-[11px] mt-0.5">${esc(m.product)}</div></td>
+        <td class="text-green" rowspan="2">${loc}</td>
+        <td class="text-cyan eve-label">FUEL BLOCKS</td>
+        <td class="text-right">${nf.format(m.fuel_blocks)}</td>
+        <td class="text-right text-cyan">${METENOX_FUELBLOCK_PER_HOUR}</td>
+        <td class="text-right text-ink">${nf.format(fb.daily)}</td>
+        <td class="text-right text-ink">${nf.format(fb.weekly)}</td>
+        <td class="text-right text-ink">${nf.format(fb.monthly)}</td>
+        <td class="${fb.cls} eve-label">${fb.dry}</td>
+      </tr>
+      <tr>
+        <td class="text-amber eve-label">MAGMATIC GAS</td>
+        <td class="text-right">${nf.format(m.magmatic)}</td>
+        <td class="text-right text-cyan">${METENOX_MAGMATIC_PER_HOUR}</td>
+        <td class="text-right text-ink">${nf.format(gas.daily)}</td>
+        <td class="text-right text-ink">${nf.format(gas.weekly)}</td>
+        <td class="text-right text-ink">${nf.format(gas.monthly)}</td>
+        <td class="${gas.cls} eve-label">${gas.dry}</td>
+      </tr>`;
+  }).join('');
+
+  $('#metenox-body').innerHTML = rowsHtml ||
+    `<tr><td colspan="9" class="text-center text-dim py-8 eve-label">No Metenox drills in this constellation</td></tr>`;
+  $('#metenox-summary').textContent = drills.length
+    ? `${drills.length} DRILLS · ${critical} NEED FUEL`
+    : '';
+}
+
+/* ---- Tab 5: Idle refineries exclusion matrix + sort ---- */
+function renderRefineries(corpStructures, extractions) {
+  if (corpStructures) CORP_STRUCT_CACHE = corpStructures;
+  if (extractions)    EXTRACT_CACHE = extractions;
+  // 1) filter corp structures to refineries only
+  const refineries = CORP_STRUCT_CACHE.filter(s => REFINERY_TYPE_IDS[s.type_id]);
+  // 2) set of structure_ids currently extracting
+  const mining = new Set(EXTRACT_CACHE.map(e => e.structure_id));
+  // 3) exclusion loop — drop any refinery that is actively mining
+  const idle = sortRows(refineries.filter(r => !mining.has(r.structure_id)), 'refineries');
+
+  $('#ref-summary').textContent =
+    `${refineries.length} REFINERIES · ${mining.size} EXTRACTING · ${idle.length} IDLE`;
+
+  $('#ref-body').innerHTML = idle.map(r => {
+    const blocks = r.fuel_blocks;
+    const fuelClass = blocks === 0 ? 'stat-crit' : blocks < 1000 ? 'stat-warn' : 'stat-ok';
+    const fuelLabel = blocks === 0 ? 'EMPTY' : blocks < 1000 ? `LOW · ${nf.format(blocks)}` : `OK · ${nf.format(blocks)}`;
+    return `
+      <tr>
+        <td class="text-cyan">${r.structure_id}</td>
+        <td class="text-ink">${REFINERY_TYPE_IDS[r.type_id]}</td>
+        <td class="text-green">${esc(r.system)}</td>
+        <td class="${fuelClass} eve-label">${fuelLabel}</td>
+      </tr>`;
+  }).join('') ||
+    `<tr><td colspan="4" class="text-center text-dim py-8 eve-label">No idle refineries — all extracting</td></tr>`;
+}
+
+/* ====================== LIVE COUNTDOWN TICKER ======================== */
+function fmtRemaining(ms) {
+  if (ms <= 0) return 'DELIVERED';
+  const s = Math.floor(ms / 1000);
+  const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = s % 60;
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${pad(h)}:${pad(m)}:${pad(sec)}`;
+}
+function tick() {
+  const now = Date.now();
+  $$('[data-countdown][data-target]').forEach(el => {
+    const t = new Date(el.getAttribute('data-target')).getTime();
+    const remaining = t - now;
+    el.textContent = fmtRemaining(remaining);
+    el.classList.toggle('stat-crit', remaining > 0 && remaining < 3600 * 1000);
+    el.classList.toggle('stat-ok',   remaining <= 0);
+  });
+}
+
+/* ===================== PICTURE-IN-PICTURE HUD ======================== *
+ * Clones the active tab's table into a borderless pure-black floating
+ * window and keeps it live-synced (so countdowns keep ticking on top of
+ * the EVE client in Fixed Window mode).
+ * ===================================================================== */
+let pipWindow = null;
+let pipSync = null;
+
+async function popOut() {
+  if (!('documentPictureInPicture' in window)) {
+    alert('Document Picture-in-Picture is not available in this browser.\nUse a recent Chromium-based browser (Chrome/Edge 116+) over HTTPS.');
+    return;
+  }
+  if (pipWindow && !pipWindow.closed) { pipWindow.focus(); return; }
+
+  pipWindow = await window.documentPictureInPicture.requestWindow({ width: 460, height: 560 });
+
+  // carry our stylesheets across so the HUD matches the app
+  for (const sheet of document.styleSheets) {
+    try {
+      const css = Array.from(sheet.cssRules).map(r => r.cssText).join('\n');
+      const style = pipWindow.document.createElement('style');
+      style.textContent = css;
+      pipWindow.document.head.appendChild(style);
+    } catch { /* cross-origin (CDN) sheet — re-link it instead */
+      if (sheet.href) {
+        const link = pipWindow.document.createElement('link');
+        link.rel = 'stylesheet'; link.href = sheet.href;
+        pipWindow.document.head.appendChild(link);
+      }
+    }
+  }
+
+  pipWindow.document.body.className = 'pip-body';
+  pipWindow.document.body.style.zoom = (Store.get('zoom') || 1);
+  const mount = pipWindow.document.createElement('div');
+  pipWindow.document.body.appendChild(mount);
+
+  const syncHud = () => {
+    const active = $$('[data-panel]').find(p => !p.hidden);
+    if (active && mount) mount.innerHTML = active.innerHTML;
+  };
+  syncHud();
+  pipSync = setInterval(syncHud, 1000); // re-sync each second → live countdowns
+
+  pipWindow.addEventListener('pagehide', () => {
+    clearInterval(pipSync); pipWindow = null;
+  });
+}
+
+/* ============================ ZOOM ================================== */
+function applyZoom(z) {
+  z = Math.min(1.6, Math.max(0.7, Math.round(z * 100) / 100));
+  document.body.style.zoom = z;
+  const v = $('#zoom-val'); if (v) v.textContent = Math.round(z * 100) + '%';
+  Store.set('zoom', z);
+  if (pipWindow && !pipWindow.closed) pipWindow.document.body.style.zoom = z;
+}
+function initZoom() {
+  applyZoom(Store.get('zoom') || 1);
+  $('#zoom-in').addEventListener('click', () => applyZoom((Store.get('zoom') || 1) + 0.1));
+  $('#zoom-out').addEventListener('click', () => applyZoom((Store.get('zoom') || 1) - 0.1));
+  // Ctrl + / Ctrl - keyboard zoom
+  window.addEventListener('keydown', (e) => {
+    if (!(e.ctrlKey || e.metaKey)) return;
+    if (e.key === '=' || e.key === '+') { e.preventDefault(); applyZoom((Store.get('zoom') || 1) + 0.1); }
+    else if (e.key === '-') { e.preventDefault(); applyZoom((Store.get('zoom') || 1) - 0.1); }
+    else if (e.key === '0') { e.preventDefault(); applyZoom(1); }
+  });
+}
+
+/* ====================== WEBHOOK ALERTS ============================== *
+ * Posts a JSON {content} payload (Discord-compatible) on critical events.
+ * Each event fires once — fired keys are persisted so reloads don't spam.
+ * ===================================================================== */
+async function sendWebhook(content) {
+  const url = Store.get('webhook');
+  if (!url) return { ok: false, reason: 'no url' };
+  try {
+    const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ content }) });
+    return { ok: res.ok || res.status === 204, reason: res.status };
+  } catch (e) { return { ok: false, reason: e.message }; }
+}
+async function maybeAlert(key, content) {
+  if (!Store.get('webhook')) return;
+  if (Store.get('fired:' + key)) return;
+  const r = await sendWebhook(content);
+  if (r.ok) Store.set('fired:' + key, Date.now());
+}
+function checkAlerts() {
+  const now = Date.now();
+  STRUCT_CACHE.forEach(s => {
+    if (s.unanchors_at) {
+      const hrs = (new Date(s.unanchors_at).getTime() - now) / 3.6e6;
+      if (hrs > 0) maybeAlert('unanchor:' + s.id, `⚠ **DECOMMISSION** — ${s.name} (${s.type}) in ${s.system} unanchors in ${hrs.toFixed(1)}h.`);
+    }
+    const burn = s.services.reduce((a, m) => a + (SERVICE_BURN[m] || 0), 0);
+    const hoursLeft = burn > 0 ? s.fuel_blocks / burn : Infinity;
+    if (isFinite(hoursLeft) && hoursLeft < 48) {
+      const day = new Date().toISOString().slice(0, 10);
+      maybeAlert('fuel:' + s.id + ':' + day, `⛽ **FUEL LOW** — ${s.name} in ${s.system} runs dry in ~${Math.floor(hoursLeft)}h.`);
+    }
+  });
+  // Metenox drills — alert on whichever fuel (blocks or magmatic) is low.
+  METENOX_CACHE.forEach(m => {
+    const day = new Date().toISOString().slice(0, 10);
+    const blockHrs = METENOX_FUELBLOCK_PER_HOUR > 0 ? m.fuel_blocks / METENOX_FUELBLOCK_PER_HOUR : Infinity;
+    const gasHrs   = METENOX_MAGMATIC_PER_HOUR  > 0 ? m.magmatic    / METENOX_MAGMATIC_PER_HOUR  : Infinity;
+    if (isFinite(blockHrs) && blockHrs < 48)
+      maybeAlert('metenox-fb:' + m.structure_id + ':' + day, `⛽ **METENOX FUEL BLOCKS LOW** — ${m.name} (${m.system}) out in ~${Math.floor(blockHrs)}h.`);
+    if (isFinite(gasHrs) && gasHrs < 48)
+      maybeAlert('metenox-gas:' + m.structure_id + ':' + day, `🌋 **METENOX MAGMATIC GAS LOW** — ${m.name} (${m.system}) out in ~${Math.floor(gasHrs)}h.`);
+  });
+}
+
+/* ====================== SETTINGS PANEL ============================== */
+function renderConnections() {
+  const conns = Object.values(Store.get('conns') || {});
+  const list = $('#connections-list');
+  list.innerHTML = conns.length
+    ? conns.map(c => {
+        const tag = c.mode === 'corp'
+          ? '<span class="pill eve-label" style="color:var(--green);border-color:var(--green)">CORP</span>'
+          : '<span class="pill pill-t2 eve-label">CHARACTER</span>';
+        return `<div class="flex items-center gap-2"><span class="text-green">●</span><span class="text-ink">${esc(c.name)}</span> ${tag}</div>`;
+      }).join('')
+    : '<div class="text-dim eve-label">No connections — using mock data</div>';
+}
+function openSettings() {
+  $('#webhook-url').value = Store.get('webhook') || '';
+  $('#webhook-status').textContent = '';
+  renderConnections();
+  const o = $('#settings-overlay');
+  o.classList.remove('hidden'); o.classList.add('flex');
+}
+function closeSettings() {
+  const o = $('#settings-overlay');
+  o.classList.add('hidden'); o.classList.remove('flex');
+}
+function initSettings() {
+  $('#settings-btn').addEventListener('click', openSettings);
+  $('#settings-close').addEventListener('click', closeSettings);
+  $('#settings-overlay').addEventListener('click', (e) => { if (e.target === $('#settings-overlay')) closeSettings(); });
+  $('#settings-login-char').addEventListener('click', () => beginLogin('character'));
+  $('#settings-login-corp').addEventListener('click', () => beginLogin('corp'));
+
+  $('#webhook-save').addEventListener('click', () => {
+    const url = $('#webhook-url').value.trim();
+    if (url) Store.set('webhook', url); else Store.del('webhook');
+    $('#webhook-status').textContent = url ? 'SAVED' : 'CLEARED';
+    $('#webhook-status').className = 'text-[11px] eve-label text-green';
+  });
+  $('#webhook-clear').addEventListener('click', () => {
+    Store.del('webhook'); $('#webhook-url').value = '';
+    $('#webhook-status').textContent = 'CLEARED'; $('#webhook-status').className = 'text-[11px] eve-label text-dim';
+  });
+  $('#webhook-test').addEventListener('click', async () => {
+    const url = $('#webhook-url').value.trim();
+    if (url) Store.set('webhook', url);
+    $('#webhook-status').textContent = 'SENDING…'; $('#webhook-status').className = 'text-[11px] eve-label text-amber';
+    const r = await sendWebhook('🛰 FOUNDRY test alert — webhook is wired up.');
+    $('#webhook-status').textContent = r.ok ? 'TEST SENT ✓' : 'FAILED (' + r.reason + ')';
+    $('#webhook-status').className = 'text-[11px] eve-label ' + (r.ok ? 'text-green' : 'text-red');
+  });
+}
+
+/* ============================ BOOT =================================== */
+function switchTab(name) {
+  $$('[role="tab"]').forEach(b => b.setAttribute('aria-selected', String(b.dataset.tab === name)));
+  $$('[data-panel]').forEach(p => { p.hidden = (p.id !== 'tab-' + name); });
+}
+
+// Pilot/Corp sub-tab switch within a section. key = "tab:level".
+function switchSub(key) {
+  const [tab] = key.split(':');
+  $$('[data-subbtn^="' + tab + ':"]').forEach(b => b.setAttribute('aria-selected', String(b.dataset.subbtn === key)));
+  $$('[data-sub^="' + tab + ':"]').forEach(p => { p.hidden = (p.dataset.sub !== key); });
+}
+function initSubtabs() {
+  $$('[data-subbtn]').forEach(b => b.addEventListener('click', () => switchSub(b.dataset.subbtn)));
+}
+
+async function boot() {
+  // OAuth return?
+  if (location.search.includes('code=')) {
+    const ok = await handleCallback();
+    if (ok) CONFIG.USE_MOCK = false;
+  }
+  // Reflect true data source: live only when at least one connection exists.
+  const badge = $('#data-mode');
+  if (loggedIn() && !CONFIG.USE_MOCK) {
+    const bits = [];
+    if (hasChar()) bits.push('CHAR');
+    if (hasCorp()) bits.push('CORP');
+    badge.textContent = 'LIVE ESI · ' + bits.join('+');
+    badge.className = 'pill pill-t2 eve-label';
+  } else {
+    badge.textContent = 'MOCK DATA · LOGIN FOR LIVE';
+    badge.className = 'pill pill-faction eve-label';
+  }
+
+  // populate pilot selector
+  const chars = await Data.characters();
+  const sel = $('#char-select');
+  chars.forEach(c => { const o = document.createElement('option'); o.value = c.name; o.textContent = c.name; sel.appendChild(o); });
+  sel.addEventListener('change', async () => {
+    CURRENT_CHAR = sel.value;
+    ASSET_CACHE = await Data.assets();
+    renderAssets();
+    renderProduction(await Data.industryJobs());
+  });
+
+  // load + render everything
+  ASSET_CACHE = await Data.assets();
+  renderAssets();
+  renderBlueprints(await Data.blueprints());
+  renderProduction(await Data.industryJobs());
+  renderFuel(await Data.structures());
+  renderMetenox(await Data.metenox());
+  renderRefineries(await Data.corpStructures(), await Data.activeExtractions());
+
+  // constellation filter (scopes Tab 4 tables)
+  populateConstellations();
+  $('#constellation-filter').addEventListener('change', (e) => {
+    CURRENT_CONST = e.target.value;
+    renderFuel();
+    renderMetenox();
+  });
+
+  // mount per-table sort dropdowns
+  mountSorter('assets',     () => renderAssets());
+  mountSorter('blueprints', () => renderBlueprints());
+  mountSorter('production', () => renderProduction());
+  mountSorter('fuel',       () => renderFuel());
+  mountSorter('metenox',    () => renderMetenox());
+  mountSorter('refineries', () => renderRefineries());
+
+  // wire UI
+  $$('[role="tab"]').forEach(b => b.addEventListener('click', () => switchTab(b.dataset.tab)));
+  $('#asset-search').addEventListener('input', renderAssets);
+  $('#popout-btn').addEventListener('click', popOut);
+  $('#login-char-btn').addEventListener('click', () => beginLogin('character'));
+  $('#login-corp-btn').addEventListener('click', () => beginLogin('corp'));
+  initSubtabs();
+  initZoom();
+  initSettings();
+
+  // start the master 1 Hz ticker
+  tick();
+  setInterval(tick, 1000);
+}
+
+boot();
+</script>
+</body>
+</html>
