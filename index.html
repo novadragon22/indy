@@ -1,0 +1,790 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Industry Ops — EVE Manufacturing Console</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&family=JetBrains+Mono:wght@400;500;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0a0e14; --bg2:#0c111a; --panel:#111a26; --panel2:#0e1622;
+    --line:#1c2838; --line2:#2a3c52;
+    --cyan:#3fd4e0; --cyan-dim:#1f7a84;
+    --amber:#f0a830; --red:#ff5b5b; --magma:#ff7a3c;
+    --violet:#a98bff; --idle:#62788d; --green:#56d98a;
+    --text:#dbe4ef; --muted:#7d8ea3; --muted-txt:#56697e;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{background:
+    radial-gradient(1200px 600px at 80% -10%, #13202f 0%, transparent 60%),
+    radial-gradient(900px 500px at -10% 110%, #131b2a 0%, transparent 55%),
+    var(--bg);
+    color:var(--text);font-family:'Inter',system-ui,sans-serif;min-height:100vh;-webkit-font-smoothing:antialiased;}
+  .wrap{max-width:1240px;margin:0 auto;padding:22px 20px 80px;}
+
+  header.top{display:flex;align-items:flex-end;justify-content:space-between;gap:18px;flex-wrap:wrap;border-bottom:1px solid var(--line);padding-bottom:16px;margin-bottom:18px;}
+  .brand{display:flex;flex-direction:column;gap:4px;}
+  .brand .eyebrow{font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.32em;text-transform:uppercase;color:var(--cyan-dim);}
+  .brand h1{font-family:'Rajdhani',sans-serif;font-weight:700;font-size:30px;letter-spacing:.06em;text-transform:uppercase;line-height:1;}
+  .brand h1 b{color:var(--cyan);}
+  .toolbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;}
+  .btn{font-family:'Rajdhani',sans-serif;font-weight:600;letter-spacing:.08em;text-transform:uppercase;font-size:13px;cursor:pointer;border:1px solid var(--cyan-dim);background:rgba(63,212,224,.08);color:var(--cyan);padding:9px 16px;border-radius:3px;transition:.15s;display:inline-flex;align-items:center;gap:7px;}
+  .btn:hover{background:rgba(63,212,224,.18);border-color:var(--cyan);}
+  .btn.ghost{border-color:var(--line2);color:var(--muted);background:transparent;}
+  .btn.ghost:hover{color:var(--text);border-color:var(--idle);background:rgba(255,255,255,.03)}
+  .btn.danger{border-color:#5e2933;color:var(--red);background:rgba(255,91,91,.06)}
+  .btn.danger:hover{background:rgba(255,91,91,.15);border-color:var(--red)}
+  .btn.good{border-color:#22402e;color:var(--green);background:rgba(86,217,138,.07)}
+  .btn.good:hover{background:rgba(86,217,138,.16);border-color:var(--green)}
+  .btn.sm{font-size:11px;padding:6px 11px;}
+  .icbtn{width:36px;height:36px;justify-content:center;padding:0;font-size:15px}
+
+  nav.tabs{display:flex;gap:2px;margin-bottom:20px;flex-wrap:wrap;}
+  .tab{font-family:'Rajdhani',sans-serif;font-weight:600;letter-spacing:.07em;text-transform:uppercase;font-size:14px;color:var(--muted);background:var(--panel2);border:1px solid var(--line);border-bottom:2px solid transparent;padding:11px 17px;cursor:pointer;display:flex;align-items:center;gap:9px;border-radius:3px 3px 0 0;transition:.15s;}
+  .tab:hover{color:var(--text);}
+  .tab.on{color:var(--text);background:var(--panel);border-bottom-color:var(--cyan);}
+  .tab .cnt{font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:700;background:var(--bg);border:1px solid var(--line2);border-radius:10px;padding:1px 7px;color:var(--muted);}
+  .tab.on .cnt{color:var(--cyan);border-color:var(--cyan-dim);}
+
+  .panel-title{font-family:'Rajdhani',sans-serif;font-weight:600;font-size:15px;letter-spacing:.18em;text-transform:uppercase;color:var(--muted);margin:24px 0 14px;display:flex;align-items:center;gap:12px;}
+  .panel-title:first-child{margin-top:2px}
+  .panel-title::after{content:'';height:1px;flex:1;background:linear-gradient(90deg,var(--line),transparent);}
+  .panel-title .act{margin-left:auto}
+  .panel-title .act::before{content:none}
+
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:14px;}
+  .card{position:relative;background:linear-gradient(180deg,var(--panel) 0%,var(--panel2) 100%);border:1px solid var(--line);border-radius:5px;padding:15px 16px 14px 20px;overflow:hidden;}
+  .card .rail{position:absolute;left:0;top:0;bottom:0;width:4px;}
+  .rail.running{background:var(--cyan);box-shadow:0 0 12px var(--cyan-dim)}
+  .rail.ready{background:var(--green);box-shadow:0 0 12px rgba(86,217,138,.5)}
+  .rail.pilot{background:var(--idle)}
+  .rail.pos{background:var(--green);box-shadow:0 0 12px rgba(86,217,138,.45)}
+  .rail.neg{background:var(--red);box-shadow:0 0 12px rgba(255,91,91,.4)}
+  .card-head{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:10px;}
+  .card-name{font-family:'Rajdhani',sans-serif;font-weight:700;font-size:18px;letter-spacing:.02em;line-height:1.12;}
+  .card-loc{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--muted);margin-top:3px;}
+  .badge{font-family:'JetBrains Mono',monospace;font-size:9.5px;letter-spacing:.12em;text-transform:uppercase;padding:3px 7px;border-radius:3px;white-space:nowrap;border:1px solid;}
+
+  .status-line{font-family:'Rajdhani',sans-serif;font-weight:600;font-size:13px;letter-spacing:.08em;text-transform:uppercase;display:flex;align-items:center;gap:8px;margin-bottom:6px;}
+  .status-line.running{color:var(--cyan)} .status-line.ready{color:var(--green)}
+  .dot{width:7px;height:7px;border-radius:50%;background:currentColor;box-shadow:0 0 8px currentColor;}
+  .dot.pulse{animation:pulse 1.6s infinite}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+
+  .meter-block{margin-top:11px;}
+  .meter-row{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px;}
+  .meter-label{font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);}
+  .meter-val{font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:700;}
+  .segs{display:flex;gap:2px;height:9px;}
+  .seg{flex:1;border-radius:1px;background:#16202e;transition:.2s;}
+  .runway{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--muted);margin-top:5px;display:flex;justify-content:space-between;}
+  .runway b{font-weight:700;}
+
+  .card-actions{display:flex;gap:6px;margin-top:14px;padding-top:12px;border-top:1px solid var(--line);flex-wrap:wrap;}
+  .hint{font-family:'Inter',sans-serif;font-size:12px;color:var(--muted);line-height:1.5;background:rgba(86,217,138,.05);border:1px solid #22402e;border-left:3px solid var(--green);padding:9px 11px;border-radius:3px;margin-top:11px;}
+  .jobval{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--muted);margin-top:9px;display:flex;justify-content:space-between;gap:8px}
+  .jobval b{color:var(--text)}
+
+  /* dashboard */
+  .ov-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(165px,1fr));gap:12px;}
+  .otile{background:var(--panel2);border:1px solid var(--line);border-radius:5px;padding:14px 16px;}
+  .otile .l{font-family:'Rajdhani',sans-serif;font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);}
+  .otile .v{font-family:'JetBrains Mono',monospace;font-weight:700;font-size:24px;margin-top:5px;color:var(--text)}
+  .otile .sub{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--muted-txt);margin-top:3px;}
+  .otile.cyan .v{color:var(--cyan)} .otile.green .v{color:var(--green)} .otile.amber .v{color:var(--amber)} .otile.violet .v{color:var(--violet)} .otile.magma .v{color:var(--magma)}
+  .alertbar{display:flex;gap:10px;flex-wrap:wrap;margin:16px 0 0}
+  .alert{font-family:'Rajdhani',sans-serif;font-weight:600;font-size:12px;letter-spacing:.06em;text-transform:uppercase;padding:8px 13px;border-radius:4px;display:flex;align-items:center;gap:8px}
+  .alert.soon{color:var(--amber);background:rgba(240,168,48,.08);border:1px solid #3d3320}
+  .alert.rdy{color:var(--green);background:rgba(86,217,138,.08);border:1px solid #22402e}
+  .alert .dot{position:static}
+  .nextlist{border:1px solid var(--line);border-radius:5px;overflow:hidden}
+  .nextrow{display:grid;grid-template-columns:1.4fr 1.6fr auto;gap:12px;align-items:center;padding:11px 14px;border-bottom:1px solid var(--line)}
+  .nextrow:last-child{border-bottom:none}
+  .nextrow:hover{background:rgba(63,212,224,.03)}
+  .nx-name{font-family:'Rajdhani',sans-serif;font-weight:600;font-size:14px;display:flex;align-items:center;gap:8px}
+  .nx-sub{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--muted);margin-top:2px}
+  .nx-time{font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:700;text-align:right;white-space:nowrap}
+  .pdot{width:8px;height:8px;border-radius:2px;flex:none}
+
+  /* controls */
+  .controls{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:16px;background:var(--panel2);border:1px solid var(--line);border-radius:5px;padding:11px 13px}
+  .controls input,.controls select{background:var(--bg);border:1px solid var(--line2);color:var(--text);font-family:'JetBrains Mono',monospace;font-size:12px;padding:8px 10px;border-radius:3px}
+  .controls input:focus,.controls select:focus{outline:none;border-color:var(--cyan)}
+  .search{flex:1;min-width:160px}
+  .fchips{display:flex;gap:4px;flex-wrap:wrap}
+  .fchip{font-family:'Rajdhani',sans-serif;font-weight:600;font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);background:var(--bg);border:1px solid var(--line2);border-radius:3px;padding:7px 11px;cursor:pointer}
+  .fchip.on{color:var(--cyan);border-color:var(--cyan-dim);background:rgba(63,212,224,.08)}
+
+  .empty{border:1px dashed var(--line2);border-radius:6px;padding:46px 24px;text-align:center;color:var(--muted);}
+  .empty h3{font-family:'Rajdhani',sans-serif;font-weight:600;font-size:20px;letter-spacing:.06em;text-transform:uppercase;color:var(--text);margin-bottom:8px;}
+  .empty p{font-size:13.5px;max-width:440px;margin:0 auto 18px;line-height:1.6;}
+
+  .slot-summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:18px;}
+  .stile{background:var(--panel2);border:1px solid var(--line);border-radius:5px;padding:13px 15px;}
+  .stile .l{font-family:'Rajdhani',sans-serif;font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);}
+  .stile .v{font-family:'JetBrains Mono',monospace;font-weight:700;font-size:22px;margin-top:4px;}
+  .stile.mfg .v{color:var(--cyan)} .stile.sci .v{color:var(--violet)} .stile.rxn .v{color:var(--magma)} .stile.un .v{color:var(--amber)}
+  .stile .sub{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--muted-txt);margin-top:2px;}
+  .pilotjobs{margin-top:11px;border-top:1px solid var(--line);padding-top:9px}
+  .pj{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--muted);display:flex;justify-content:space-between;gap:8px;padding:2px 0}
+  .pj .pdot{display:inline-block;margin-right:6px;vertical-align:middle}
+
+  .buildnums{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:11px}
+  .bn{background:var(--bg);border:1px solid var(--line);border-radius:4px;padding:8px 10px}
+  .bl{font-family:'Rajdhani',sans-serif;font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);display:block}
+  .bv{font-family:'JetBrains Mono',monospace;font-weight:700;font-size:14px}
+  .profit{font-family:'JetBrains Mono',monospace;font-weight:700;font-size:21px;margin-top:11px;text-align:center;padding:10px;border-radius:4px}
+  .profit.pos{color:var(--green);background:rgba(86,217,138,.08);border:1px solid #22402e}
+  .profit.neg{color:var(--red);background:rgba(255,91,91,.07);border:1px solid #4a2730}
+  .profit small{font-family:'Rajdhani',sans-serif;font-weight:600;font-size:12px;letter-spacing:.08em;color:var(--muted);display:block;margin-top:3px}
+  .metaline{display:flex;justify-content:space-between;gap:8px;font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--muted);margin-top:9px}
+  .metaline b{color:var(--text)}
+  .pill{font-family:'Rajdhani',sans-serif;font-weight:600;font-size:10px;letter-spacing:.08em;text-transform:uppercase;border:1px solid var(--line2);color:var(--muted);background:var(--bg);border-radius:3px;padding:4px 8px;cursor:pointer}
+  .pill.on{color:var(--magma);border-color:#5e3a26;background:rgba(255,122,60,.1)}
+  .matflag{font-family:'JetBrains Mono',monospace;font-size:10px;padding:3px 8px;border-radius:3px;border:1px solid}
+  .matflag.ok{color:var(--green);border-color:#22402e;background:rgba(86,217,138,.06)}
+  .matflag.short{color:var(--amber);border-color:#3d3320;background:rgba(240,168,48,.07)}
+
+  .tbl-wrap{overflow-x:auto;border:1px solid var(--line);border-radius:5px;}
+  table{width:100%;border-collapse:collapse;font-size:13px;min-width:520px;}
+  thead th{font-family:'Rajdhani',sans-serif;font-weight:600;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);text-align:right;padding:11px 13px;background:var(--panel2);border-bottom:1px solid var(--line2);white-space:nowrap;}
+  thead th.l{text-align:left;}
+  tbody td{padding:10px 13px;text-align:right;font-family:'JetBrains Mono',monospace;border-bottom:1px solid var(--line);}
+  tbody td.l{text-align:left;font-family:'Inter',sans-serif;}
+  tbody td .nm{font-family:'Rajdhani',sans-serif;font-weight:600;font-size:14px;}
+  tbody tr:hover{background:rgba(63,212,224,.03)}
+  tbody td.cy{color:var(--cyan)} tbody td.gr{color:var(--green)} tbody td.am{color:var(--amber)} tbody td.dim{color:var(--muted-txt)}
+  tfoot td{padding:11px 13px;text-align:right;font-family:'JetBrains Mono',monospace;font-weight:700;border-top:2px solid var(--line2);background:var(--panel2);}
+  tfoot td.l{text-align:left;font-family:'Rajdhani',sans-serif;letter-spacing:.1em;text-transform:uppercase;font-size:12px;color:var(--muted);}
+  .rowbtns{display:flex;gap:5px;justify-content:flex-end}
+  .minibtn{font-family:'Rajdhani',sans-serif;font-size:10px;letter-spacing:.06em;text-transform:uppercase;border:1px solid var(--line2);background:none;color:var(--muted);border-radius:3px;padding:4px 8px;cursor:pointer}
+  .minibtn:hover{color:var(--text);border-color:var(--idle)}
+  .minibtn.danger:hover{color:var(--red);border-color:#5e2933}
+
+  .overlay{position:fixed;inset:0;background:rgba(5,8,12,.78);backdrop-filter:blur(3px);display:none;align-items:flex-start;justify-content:center;z-index:50;padding:34px 16px;overflow:auto;}
+  .overlay.on{display:flex;}
+  .modal{background:linear-gradient(180deg,var(--panel),var(--panel2));border:1px solid var(--line2);border-radius:6px;width:100%;max-width:540px;padding:22px 24px 24px;box-shadow:0 24px 60px rgba(0,0,0,.6);}
+  .modal h2{font-family:'Rajdhani',sans-serif;font-weight:700;font-size:21px;letter-spacing:.06em;text-transform:uppercase;margin-bottom:3px;}
+  .modal .msub{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--muted);margin-bottom:18px;}
+  .screen.hide{display:none}
+  .field{margin-bottom:14px;}
+  .field label{display:block;font-family:'Rajdhani',sans-serif;font-weight:600;font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:5px;}
+  .field input,.field select{width:100%;background:var(--bg);border:1px solid var(--line2);color:var(--text);font-family:'JetBrains Mono',monospace;font-size:13px;padding:9px 11px;border-radius:3px;}
+  .field input:focus,.field select:focus{outline:none;border-color:var(--cyan);box-shadow:0 0 0 2px rgba(63,212,224,.15)}
+  .checkrow{display:flex;align-items:center;gap:9px;margin-bottom:14px;cursor:pointer}
+  .checkrow input{width:auto}
+  .checkrow span{font-family:'Rajdhani',sans-serif;font-weight:600;font-size:13px;letter-spacing:.04em;color:var(--text)}
+  .row2{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+  .row3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;}
+  .modal-actions{display:flex;gap:10px;margin-top:20px;justify-content:flex-end;flex-wrap:wrap;}
+  .hide{display:none!important;}
+
+  .chooser{display:grid;gap:10px;margin:4px 0 2px}
+  .choice{display:flex;gap:14px;align-items:center;text-align:left;background:var(--bg);border:1px solid var(--line2);border-radius:5px;padding:15px;cursor:pointer;transition:.15s;color:var(--text);width:100%}
+  .choice:hover{border-color:var(--cyan);background:rgba(63,212,224,.05)}
+  .choice .ci{font-size:19px;width:40px;height:40px;display:flex;align-items:center;justify-content:center;border:1px solid var(--line2);border-radius:5px;color:var(--cyan);flex:none}
+  .choice.pilot .ci{color:var(--idle)} .choice.build .ci{color:var(--magma);border-color:#5e3a26} .choice.item .ci{color:var(--green);border-color:#22402e}
+  .choice .ct{font-family:'Rajdhani',sans-serif;font-weight:700;font-size:15px;letter-spacing:.03em}
+  .choice .cd{font-size:12px;color:var(--muted);margin-top:2px;line-height:1.4}
+
+  .matsmall{font-family:'Rajdhani',sans-serif;font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);display:grid;grid-template-columns:1fr 70px 100px 28px;gap:6px;margin-bottom:5px}
+  .matrow{display:grid;grid-template-columns:1fr 70px 100px 28px;gap:6px;margin-bottom:6px;align-items:center}
+  .matrow input{width:100%;background:var(--bg);border:1px solid var(--line2);color:var(--text);font-family:'JetBrains Mono',monospace;font-size:12px;padding:7px 8px;border-radius:3px;}
+  .matrow input:focus{outline:none;border-color:var(--cyan)}
+  .matx{background:none;border:1px solid var(--line2);color:var(--red);border-radius:3px;cursor:pointer;height:33px;font-size:14px}
+  .matx:hover{background:rgba(255,91,91,.1)}
+  .addmat{font-family:'Rajdhani',sans-serif;font-weight:600;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--cyan);background:none;border:1px dashed var(--cyan-dim);border-radius:3px;padding:7px;cursor:pointer;width:100%;margin-top:2px}
+  .addmat:hover{background:rgba(63,212,224,.06)}
+  .calcbar{font-family:'JetBrains Mono',monospace;font-size:11.5px;color:var(--muted);background:var(--bg);border:1px solid var(--line);border-radius:4px;padding:10px 12px;margin-top:8px;display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px}
+  .calcbar b{color:var(--text);font-weight:700}
+  .tinynote{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--muted-txt);margin-top:6px}
+
+  .toast{position:fixed;left:50%;bottom:26px;transform:translateX(-50%);background:var(--panel);border:1px solid var(--cyan-dim);color:var(--text);font-size:13px;padding:11px 18px;border-radius:5px;box-shadow:0 12px 40px rgba(0,0,0,.5);z-index:80;max-width:90%;text-align:center;opacity:0;transition:.25s;pointer-events:none}
+  .toast.show{opacity:1}
+  .footnote{font-family:'JetBrains Mono',monospace;font-size:10.5px;color:var(--muted-txt);margin-top:26px;text-align:center;letter-spacing:.04em;line-height:1.7;border-top:1px solid var(--line);padding-top:18px;}
+  @media(max-width:560px){.brand h1{font-size:24px}.row2,.row3{grid-template-columns:1fr}.nextrow{grid-template-columns:1fr auto}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <div class="brand">
+      <span class="eyebrow">// Industrial Command Net</span>
+      <h1>Industry <b>Ops</b></h1>
+    </div>
+    <div class="toolbar">
+      <button class="btn ghost icbtn" id="exportBtn" title="Download backup">⭳</button>
+      <button class="btn ghost icbtn" id="importBtn" title="Restore backup">⭱</button>
+      <input type="file" id="importFile" accept="application/json" style="display:none">
+      <button class="btn" id="addBtn">+ New</button>
+    </div>
+  </header>
+
+  <nav class="tabs">
+    <button class="tab on" data-sec="overview"><span>Overview</span></button>
+    <button class="tab" data-sec="jobs"><span>Jobs</span><span class="cnt" id="cJobs">0</span></button>
+    <button class="tab" data-sec="slots"><span>Slots</span><span class="cnt" id="cSlot">0</span></button>
+    <button class="tab" data-sec="builds"><span>Builds</span><span class="cnt" id="cBuild">0</span></button>
+    <button class="tab" data-sec="stock"><span>Stock &amp; shopping</span><span class="cnt" id="cItem">0</span></button>
+  </nav>
+
+  <!-- OVERVIEW -->
+  <section id="sec-overview">
+    <div class="panel-title">Production overview</div>
+    <div class="ov-grid" id="ovGrid"></div>
+    <div class="alertbar" id="alertBar"></div>
+    <div class="panel-title">Completing next</div>
+    <div id="nextList"></div>
+  </section>
+
+  <!-- JOBS -->
+  <section id="sec-jobs" class="hide">
+    <div class="panel-title">Industry jobs</div>
+    <div class="controls">
+      <input class="search" id="jobSearch" placeholder="Search product, pilot, location…">
+      <div class="fchips" id="statusChips">
+        <button class="fchip on" data-st="all">All</button>
+        <button class="fchip" data-st="running">Running</button>
+        <button class="fchip" data-st="ready">Ready</button>
+      </div>
+      <select id="actFilter"><option value="all">All activities</option></select>
+      <select id="pilotFilter"><option value="all">All pilots</option></select>
+      <select id="jobSort">
+        <option value="soonest">Sort: soonest first</option>
+        <option value="latest">Sort: latest first</option>
+        <option value="new">Sort: recently added</option>
+        <option value="az">Sort: product A–Z</option>
+      </select>
+      <button class="btn good sm" id="deliverAll">Deliver all ready</button>
+    </div>
+    <div class="grid" id="jobGrid"></div>
+  </section>
+
+  <!-- SLOTS -->
+  <section id="sec-slots" class="hide">
+    <div class="panel-title">Job slots — pilot capacity</div>
+    <div class="slot-summary" id="slotSummary"></div>
+    <div class="grid" id="pilotGrid"></div>
+  </section>
+
+  <!-- BUILDS -->
+  <section id="sec-builds" class="hide">
+    <div class="panel-title">Build planner — cost, profit & efficiency</div>
+    <div class="grid" id="buildGrid"></div>
+  </section>
+
+  <!-- STOCK -->
+  <section id="sec-stock" class="hide">
+    <div class="panel-title">Inventory &amp; price book<button class="btn sm act" id="addItemBtn" style="margin-left:auto">+ Stock item</button></div>
+    <div id="invWrap"></div>
+    <div class="panel-title">Shopping list <span style="font-family:'JetBrains Mono';font-size:11px;letter-spacing:0;text-transform:none;color:var(--muted-txt);font-weight:400">— builds marked “in plan”, minus stock on hand</span></div>
+    <div id="shopWrap"></div>
+  </section>
+
+  <div class="footnote">
+    Material formula: ceil(qty/run × runs × (100−ME)/100 × (100−facility)/100). Time: per-run × runs × (100−TE)/100. Material prices fall back to your price book in Stock. Slots: base 1 per line +1 each from the core & advanced skills.<br>
+    All data is local to this device/account — use the backup icons to export/import. Times use your machine's clock.
+  </div>
+</div>
+
+<div class="overlay" id="overlay">
+  <div class="modal">
+
+    <div class="screen" id="screenChooser">
+      <h2>Add to console</h2>
+      <div class="msub">What do you want to create?</div>
+      <div class="chooser">
+        <button class="choice" id="choiceJob"><div class="ci">⚙</div><div><div class="ct">New job</div><div class="cd">A running job with a live countdown. Link it to a build to track value.</div></div></button>
+        <button class="choice pilot" id="choicePilot"><div class="ci">☷</div><div><div class="ct">New pilot</div><div class="cd">A character and their manufacturing / science / reaction slot counts.</div></div></button>
+        <button class="choice build" id="choiceBuild"><div class="ci">▤</div><div><div class="ct">New build</div><div class="cd">A blueprint plan: materials, ME/TE, prices → cost, profit, ISK/hr.</div></div></button>
+        <button class="choice item" id="choiceItem"><div class="ci">◳</div><div><div class="ct">Stock item</div><div class="cd">Material on hand with a unit price — feeds builds and the shopping list.</div></div></button>
+      </div>
+      <div class="modal-actions"><button class="btn ghost" onclick="closeModal()">Close</button></div>
+    </div>
+
+    <!-- JOB -->
+    <div class="screen hide" id="screenJob">
+      <h2 id="jobTitle">New job</h2><div class="msub" id="jobSub">Track an industry job</div>
+      <div class="field"><label for="jProduct">Product / output</label><input id="jProduct" placeholder="e.g. Hammerhead II" autocomplete="off"></div>
+      <div class="row2">
+        <div class="field"><label for="jAct">Activity</label><select id="jAct"></select></div>
+        <div class="field"><label for="jRuns">Runs</label><input id="jRuns" type="number" min="1" value="1"></div>
+      </div>
+      <div class="row2">
+        <div class="field"><label for="jPilot">Pilot</label><select id="jPilot"></select></div>
+        <div class="field"><label for="jLoc">Location</label><input id="jLoc" placeholder="e.g. Jita IV-4 / Sotiyo" autocomplete="off"></div>
+      </div>
+      <div class="field"><label for="jBuild">Linked build (optional — for value tracking)</label><select id="jBuild"></select></div>
+      <div class="row2">
+        <div class="field"><label for="jStart">Started</label><input id="jStart" type="datetime-local"></div>
+        <div class="field"><label for="jEnd">Completes</label><input id="jEnd" type="datetime-local"></div>
+      </div>
+      <div class="modal-actions"><button class="btn ghost" id="jobBack">Back</button><button class="btn" id="jobSave">Save job</button></div>
+    </div>
+
+    <!-- PILOT -->
+    <div class="screen hide" id="screenPilot">
+      <h2 id="pilotTitle">New pilot</h2><div class="msub">Slot capacity per line</div>
+      <div class="field"><label for="pName">Pilot name</label><input id="pName" placeholder="e.g. Industry Alt 1" autocomplete="off"></div>
+      <div class="row3">
+        <div class="field"><label for="pMfg">Mfg slots</label><input id="pMfg" type="number" min="0" value="1"></div>
+        <div class="field"><label for="pSci">Science slots</label><input id="pSci" type="number" min="0" value="1"></div>
+        <div class="field"><label for="pRxn">Reaction slots</label><input id="pRxn" type="number" min="0" value="1"></div>
+      </div>
+      <div class="modal-actions"><button class="btn ghost" id="pilotBack">Back</button><button class="btn" id="pilotSave">Save pilot</button></div>
+    </div>
+
+    <!-- BUILD -->
+    <div class="screen hide" id="screenBuild">
+      <h2 id="buildTitle">New build</h2><div class="msub">Bill of materials, efficiency, prices</div>
+      <div class="row2">
+        <div class="field"><label for="bName">Product name</label><input id="bName" placeholder="e.g. Hammerhead II" autocomplete="off"></div>
+        <div class="field"><label for="bAct">Activity</label><select id="bAct"></select></div>
+      </div>
+      <div class="row3">
+        <div class="field"><label for="bRuns">Runs</label><input id="bRuns" type="number" min="1" value="1"></div>
+        <div class="field"><label for="bUnits">Units / run</label><input id="bUnits" type="number" min="1" value="1"></div>
+        <div class="field"><label for="bTime">Time / run (h)</label><input id="bTime" type="number" min="0" step="0.1" value="0"></div>
+      </div>
+      <div class="row3">
+        <div class="field"><label for="bME">ME %</label><input id="bME" type="number" min="0" max="100" value="0"></div>
+        <div class="field"><label for="bTE">TE %</label><input id="bTE" type="number" min="0" max="100" value="0"></div>
+        <div class="field"><label for="bFac">Facility %</label><input id="bFac" type="number" min="0" max="100" value="0"></div>
+      </div>
+      <div class="row2">
+        <div class="field"><label for="bSell">Sell price / unit</label><input id="bSell" type="number" min="0" placeholder="ISK"></div>
+        <div class="field"><label for="bFee">Install fee total</label><input id="bFee" type="number" min="0" placeholder="ISK (optional)"></div>
+      </div>
+      <label class="checkrow"><input type="checkbox" id="bPlan"><span>Include in shopping list (in plan)</span></label>
+      <div class="field" style="margin-bottom:8px"><label>Materials (per run)</label>
+        <div class="matsmall"><span>Material</span><span>Qty/run</span><span>ISK/unit</span><span></span></div>
+        <div id="matRows"></div>
+        <button class="addmat" id="addMat">+ Add material</button>
+        <div class="tinynote">Leave ISK/unit blank to use the price book from Stock.</div>
+      </div>
+      <div class="calcbar" id="calcBar"></div>
+      <div class="modal-actions"><button class="btn ghost" id="buildBack">Back</button><button class="btn" id="buildSave">Save build</button></div>
+    </div>
+
+    <!-- ITEM -->
+    <div class="screen hide" id="screenItem">
+      <h2 id="itemTitle">New stock item</h2><div class="msub">Material on hand and its unit price</div>
+      <div class="field"><label for="iName">Material name</label><input id="iName" placeholder="e.g. Tritanium" autocomplete="off"></div>
+      <div class="row2">
+        <div class="field"><label for="iQty">Quantity on hand</label><input id="iQty" type="number" min="0" value="0"></div>
+        <div class="field"><label for="iPrice">Unit price (ISK)</label><input id="iPrice" type="number" min="0" placeholder="ISK"></div>
+      </div>
+      <div class="modal-actions"><button class="btn ghost" id="itemBack">Back</button><button class="btn" id="itemSave">Save item</button></div>
+    </div>
+
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const ACT = {
+  manufacturing:{label:'Manufacturing', short:'MFG',  line:'mfg', color:'var(--cyan)',   bd:'var(--cyan-dim)', bg:'rgba(63,212,224,.07)'},
+  reaction:     {label:'Reaction',      short:'RXN',  line:'rxn', color:'var(--magma)',  bd:'#5e3a26',         bg:'rgba(255,122,60,.08)'},
+  invention:    {label:'Invention',     short:'INV',  line:'sci', color:'var(--violet)', bd:'#41386a',         bg:'rgba(169,139,255,.08)'},
+  copy:         {label:'Copying',       short:'COPY', line:'sci', color:'var(--green)',  bd:'#22402e',         bg:'rgba(86,217,138,.07)'},
+  me:           {label:'Material research', short:'ME', line:'sci', color:'var(--amber)', bd:'#3d3320',        bg:'rgba(240,168,48,.07)'},
+  te:           {label:'Time research',  short:'TE',  line:'sci', color:'var(--amber)',  bd:'#3d3320',         bg:'rgba(240,168,48,.07)'},
+};
+const LINE_LABEL={mfg:'Manufacturing',sci:'Science',rxn:'Reaction'};
+const K_JOBS='industry_jobs_v2', K_PILOTS='industry_pilots_v2', K_BUILDS='industry_builds_v2', K_ITEMS='industry_items_v2';
+let jobs=[], pilots=[], builds=[], items=[];
+let editJob=null, editPilot=null, editBuild=null, editItem=null;
+let jf={status:'all', activity:'all', pilot:'all', q:'', sort:'soonest'};
+
+/* storage */
+const _mem={};
+async function sGet(k){ try{ if(window.storage){ const r=await window.storage.get(k); return r&&r.value!=null?JSON.parse(r.value):null; } }catch(e){}
+  try{ const v=localStorage.getItem(k); return v!=null?JSON.parse(v):null; }catch(e){} return (k in _mem)?_mem[k]:null; }
+async function sSet(k,v){ const s=JSON.stringify(v); try{ if(window.storage){ await window.storage.set(k,s); return; } }catch(e){}
+  try{ localStorage.setItem(k,s); return; }catch(e){} _mem[k]=v; }
+async function saveAll(){ await sSet(K_JOBS,jobs); await sSet(K_PILOTS,pilots); await sSet(K_BUILDS,builds); await sSet(K_ITEMS,items); renderAll(); }
+
+/* helpers */
+const now=()=>Date.now();
+const uid=p=>p+Date.now()+Math.random().toString(36).slice(2,6);
+function esc(s){ return (s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+function isk(n){ n=+n||0; const neg=n<0?'-':''; const a=Math.abs(n);
+  if(a>=1e9) return neg+(a/1e9>=100?(a/1e9).toFixed(0):(a/1e9).toFixed(2))+'B';
+  if(a>=1e6) return neg+(a/1e6>=100?(a/1e6).toFixed(0):(a/1e6).toFixed(2))+'M';
+  if(a>=1e3) return neg+(a/1e3>=100?(a/1e3).toFixed(0):(a/1e3).toFixed(2))+'K';
+  return neg+Math.round(a).toLocaleString(); }
+function durText(ms){ if(ms<=0) return 'done'; const h=ms/3600000; const d=Math.floor(h/24),hr=Math.floor(h%24),m=Math.round((h-Math.floor(h))*60);
+  if(d>0) return d+'d '+hr+'h'; if(hr>0) return hr+'h '+m+'m'; return m+'m'; }
+function toLocalInput(iso){ const d=iso?new Date(iso):new Date(); return new Date(d.getTime()-d.getTimezoneOffset()*60000).toISOString().slice(0,16); }
+function bar(frac,color){ const n=16, f=Math.round(Math.max(0,Math.min(1,frac))*n); let s='';
+  for(let i=0;i<n;i++) s+=`<div class="seg" style="background:${i<f?color:'#16202e'}"></div>`; return `<div class="segs">${s}</div>`; }
+function jobStatus(j){ return Date.parse(j.end)>now()?'running':'ready'; }
+function pilotName(id){ const p=pilots.find(x=>x.id===id); return p?p.name:''; }
+
+/* price book / inventory */
+function invMap(){ const m={}; items.forEach(i=>{ m[(i.name||'').toLowerCase()]={price:+i.price||0,qty:+i.qty||0}; }); return m; }
+function matUnitPrice(name,override,im){ if(override>0) return override; const e=im[(name||'').toLowerCase()]; return e?e.price:0; }
+function invQty(name,im){ const e=im[(name||'').toLowerCase()]; return e?e.qty:0; }
+
+/* build economics */
+function buildCalc(b){
+  const im=invMap();
+  const me=Math.max(0,Math.min(100,+b.me||0)), te=Math.max(0,Math.min(100,+b.te||0)), fac=Math.max(0,Math.min(100,+b.fac||0));
+  const mult=(100-me)/100*(100-fac)/100, runs=+b.runs||1, units=+b.units||1;
+  let matCost=0;
+  const mats=(b.materials||[]).map(m=>{
+    const total=Math.ceil((+m.qty||0)*runs*mult);
+    const unit=matUnitPrice(m.name,+m.price||0,im);
+    const cost=total*unit, have=invQty(m.name,im), short=Math.max(0,total-have);
+    matCost+=cost; return {name:m.name,total,unit,cost,have,short};
+  });
+  const fee=+b.fee||0, totalCost=matCost+fee, revenue=(+b.sell||0)*units*runs;
+  const profit=revenue-totalCost, margin=revenue>0?profit/revenue*100:0;
+  const unitsTotal=units*runs, costPerUnit=unitsTotal>0?totalCost/unitsTotal:0;
+  const totalTime=(+b.time||0)*runs*(100-te)/100, iskPerHr=totalTime>0?profit/totalTime:0;
+  const profitPerRun=runs>0?profit/runs:0;
+  const shortCount=mats.filter(m=>m.short>0&&m.total>0).length;
+  return {mats,matCost,fee,totalCost,revenue,profit,margin,costPerUnit,totalTime,iskPerHr,profitPerRun,shortCount,runs,units};
+}
+function jobValue(j){ if(!j.buildId) return {cost:0,revenue:0}; const b=builds.find(x=>x.id===j.buildId); if(!b||(+b.runs||0)<=0) return {cost:0,revenue:0};
+  const c=buildCalc(b); const r=+j.runs||1; return {cost:c.totalCost/b.runs*r, revenue:c.revenue/b.runs*r}; }
+
+/* cards */
+function jobCard(j){
+  const a=ACT[j.activity], st=jobStatus(j);
+  const start=Date.parse(j.start), end=Date.parse(j.end);
+  const frac=end>start?(now()-start)/(end-start):1, remaining=end-now();
+  const badge=`<span class="badge" style="color:${a.color};border-color:${a.bd};background:${a.bg}">${a.short}</span>`;
+  const pn=j.pilotId?pilotName(j.pilotId):'Unassigned';
+  let body=`<div class="meter-block">
+    <div class="meter-row"><span class="meter-label">Progress</span><span class="meter-val" style="color:${st==='ready'?'var(--green)':a.color}">${st==='ready'?'100%':Math.floor(Math.max(0,Math.min(1,frac))*100)+'%'}</span></div>
+    ${bar(st==='ready'?1:frac, st==='ready'?'var(--green)':a.color)}
+    <div class="runway"><span>${(+j.runs||1).toLocaleString()} run${(+j.runs||1)!==1?'s':''}</span><span>${st==='ready'?'<b style="color:var(--green)">ready to deliver</b>':'completes in <b>'+durText(remaining)+'</b>'}</span></div></div>`;
+  const v=jobValue(j);
+  if(v.cost||v.revenue) body+=`<div class="jobval"><span>cost <b>${isk(v.cost)}</b></span><span>value <b style="color:var(--green)">${isk(v.revenue)}</b></span></div>`;
+  if(st==='ready') body+=`<div class="hint">Job finished — deliver to free the ${LINE_LABEL[a.line].toLowerCase()} slot.</div>`;
+  let actions=`<button class="btn ghost sm" onclick="openJob('${j.id}')">Edit</button>`;
+  if(st==='ready') actions+=`<button class="btn good sm" onclick="deliver('${j.id}')">Deliver</button>`;
+  actions+=`<button class="btn danger sm" onclick="delJob('${j.id}')">Delete</button>`;
+  return `<div class="card"><div class="rail ${st}"></div>
+    <div class="card-head"><div><div class="card-name">${esc(j.product)||'Unnamed job'}</div>
+      <div class="card-loc">${esc(pn)} · ${esc(j.loc)||'—'}</div></div>${badge}</div>
+    <div class="status-line ${st}"><span class="dot ${st==='running'?'pulse':''}"></span>${st==='ready'?'Ready':a.label}</div>
+    ${body}<div class="card-actions">${actions}</div></div>`;
+}
+function slotMeter(label,used,total,color){
+  const free=total-used, over=used>total, full=total>0&&used>=total;
+  const col=over?'var(--red)':full?'var(--amber)':color, frac=total>0?used/total:0;
+  return `<div class="meter-block"><div class="meter-row"><span class="meter-label">${label}</span><span class="meter-val" style="color:${col}">${used} / ${total}</span></div>
+    ${bar(frac,col)}<div class="runway"><span></span><span>${over?'<b style="color:var(--red)">over capacity</b>':total>0?(free>0?'<b style="color:var(--green)">'+free+' free</b>':'<b style="color:var(--amber)">full</b>'):'no slots set'}</span></div></div>`;
+}
+function pilotCard(p,usage){
+  const u=usage[p.id]||{mfg:0,sci:0,rxn:0};
+  const pjobs=jobs.filter(j=>j.pilotId===p.id);
+  let body=slotMeter('Manufacturing',u.mfg,+p.mfg||0,'var(--cyan)')+slotMeter('Science',u.sci,+p.sci||0,'var(--violet)')+slotMeter('Reaction',u.rxn,+p.rxn||0,'var(--magma)');
+  if(pjobs.length){ body+=`<div class="pilotjobs">`+pjobs.slice(0,6).map(j=>{const a=ACT[j.activity],st=jobStatus(j),rem=Date.parse(j.end)-now();
+    return `<div class="pj"><span><span class="pdot" style="background:${a.color}"></span>${esc(j.product)}</span><span>${st==='ready'?'<span style="color:var(--green)">ready</span>':durText(rem)}</span></div>`;}).join('')+`</div>`; }
+  const tot=(+p.mfg||0)+(+p.sci||0)+(+p.rxn||0), used=u.mfg+u.sci+u.rxn;
+  return `<div class="card"><div class="rail pilot"></div>
+    <div class="card-head"><div><div class="card-name">${esc(p.name)||'Unnamed'}</div>
+      <div class="card-loc">${used}/${tot} slots used · ${tot?Math.round(used/tot*100):0}%</div></div>
+      <span class="badge" style="color:var(--idle);border-color:var(--line2);background:rgba(98,120,141,.08)">PILOT</span></div>
+    ${body}<div class="card-actions"><button class="btn ghost sm" onclick="openPilot('${p.id}')">Edit</button>
+      <button class="btn danger sm" onclick="delPilot('${p.id}')">Delete</button></div></div>`;
+}
+function buildCard(b){
+  const c=buildCalc(b), sign=c.profit>=0?'pos':'neg', a=ACT[b.activity||'manufacturing'];
+  const flag=c.shortCount>0?`<span class="matflag short">short ${c.shortCount}</span>`:(c.mats.length?`<span class="matflag ok">stocked</span>`:'');
+  return `<div class="card"><div class="rail ${sign}"></div>
+    <div class="card-head"><div><div class="card-name">${esc(b.name)||'Unnamed build'}</div>
+      <div class="card-loc">${(+b.runs||1).toLocaleString()}×${(+b.units||1)}/run · ME ${(+b.me||0)} · TE ${(+b.te||0)}${(+b.fac||0)?' · fac '+b.fac:''}</div></div>
+      <button class="pill ${b.inPlan?'on':''}" onclick="toggleInPlan('${b.id}')">${b.inPlan?'● In plan':'In plan'}</button></div>
+    <div class="buildnums">
+      <div class="bn"><span class="bl">Total cost</span><span class="bv" style="color:var(--cyan)">${isk(c.totalCost)}</span></div>
+      <div class="bn"><span class="bl">Revenue</span><span class="bv" style="color:var(--green)">${isk(c.revenue)}</span></div></div>
+    <div class="profit ${sign}">${c.profit>=0?'+':''}${isk(c.profit)}<small>${c.margin.toFixed(1)}% margin · ${isk(c.costPerUnit)}/unit cost</small></div>
+    <div class="metaline"><span>${c.totalTime>0?'ISK/hr <b style="color:'+(c.iskPerHr>=0?'var(--green)':'var(--red)')+'">'+isk(c.iskPerHr)+'</b>':'no build time set'}</span><span>profit/run <b>${isk(c.profitPerRun)}</b></span></div>
+    <div class="metaline"><span>${c.mats.length} material${c.mats.length!==1?'s':''}</span><span>${flag}</span></div>
+    <div class="card-actions"><button class="btn ghost sm" onclick="openBuild('${b.id}')">Edit</button>
+      <button class="btn good sm" onclick="queueJob('${b.id}')">Queue job</button>
+      <button class="btn ghost sm" onclick="dupBuild('${b.id}')">Copy</button>
+      <button class="btn danger sm" onclick="delBuild('${b.id}')">Delete</button></div></div>`;
+}
+
+/* render: usage */
+function computeUsage(){ const usage={}; pilots.forEach(p=>usage[p.id]={mfg:0,sci:0,rxn:0}); let unassigned=0;
+  jobs.forEach(j=>{ const line=ACT[j.activity].line; if(j.pilotId&&usage[j.pilotId]) usage[j.pilotId][line]++; else unassigned++; }); return {usage,unassigned}; }
+
+/* render: jobs with filters */
+function filteredJobs(){
+  let list=jobs.slice();
+  if(jf.status!=='all') list=list.filter(j=>jobStatus(j)===jf.status);
+  if(jf.activity!=='all') list=list.filter(j=>j.activity===jf.activity);
+  if(jf.pilot!=='all') list=list.filter(j=> jf.pilot==='none' ? !j.pilotId : j.pilotId===jf.pilot);
+  if(jf.q){ const q=jf.q.toLowerCase(); list=list.filter(j=>(j.product||'').toLowerCase().includes(q)||pilotName(j.pilotId).toLowerCase().includes(q)||(j.loc||'').toLowerCase().includes(q)); }
+  const s=jf.sort;
+  if(s==='soonest') list.sort((a,b)=>Date.parse(a.end)-Date.parse(b.end));
+  else if(s==='latest') list.sort((a,b)=>Date.parse(b.end)-Date.parse(a.end));
+  else if(s==='new') list.sort((a,b)=>(b.created||0)-(a.created||0));
+  else if(s==='az') list.sort((a,b)=>(a.product||'').localeCompare(b.product||''));
+  return list;
+}
+
+function renderAll(){
+  const running=jobs.filter(j=>jobStatus(j)==='running');
+  const ready=jobs.filter(j=>jobStatus(j)==='ready');
+  const {usage,unassigned}=computeUsage();
+  const tot={mfg:0,sci:0,rxn:0}, used={mfg:0,sci:0,rxn:0};
+  pilots.forEach(p=>{tot.mfg+=+p.mfg||0;tot.sci+=+p.sci||0;tot.rxn+=+p.rxn||0;used.mfg+=usage[p.id].mfg;used.sci+=usage[p.id].sci;used.rxn+=usage[p.id].rxn;});
+  const totalSlots=tot.mfg+tot.sci+tot.rxn, usedSlots=used.mfg+used.sci+used.rxn;
+
+  document.getElementById('cJobs').textContent=jobs.length;
+  document.getElementById('cSlot').textContent=pilots.length;
+  document.getElementById('cBuild').textContent=builds.length;
+  document.getElementById('cItem').textContent=items.length;
+
+  /* overview */
+  const iskInProd=running.reduce((s,j)=>s+jobValue(j).cost,0);
+  const valueReady=ready.reduce((s,j)=>s+jobValue(j).revenue,0);
+  const capital=items.reduce((s,i)=>s+(+i.qty||0)*(+i.price||0),0);
+  const plannedProfit=builds.filter(b=>b.inPlan).reduce((s,b)=>s+buildCalc(b).profit,0);
+  const util=totalSlots?Math.round(usedSlots/totalSlots*100):0;
+  document.getElementById('ovGrid').innerHTML=`
+    <div class="otile cyan"><div class="l">Jobs running</div><div class="v">${running.length}</div><div class="sub">${ready.length} ready · ${unassigned} unassigned</div></div>
+    <div class="otile green"><div class="l">Value ready to collect</div><div class="v">${isk(valueReady)}</div><div class="sub">from linked builds</div></div>
+    <div class="otile cyan"><div class="l">ISK in production</div><div class="v">${isk(iskInProd)}</div><div class="sub">cost tied up in running jobs</div></div>
+    <div class="otile amber"><div class="l">Slot utilisation</div><div class="v">${util}%</div><div class="sub">${usedSlots}/${totalSlots} slots · ${pilots.length} pilots</div></div>
+    <div class="otile violet"><div class="l">Capital in stock</div><div class="v">${isk(capital)}</div><div class="sub">${items.length} materials on hand</div></div>
+    <div class="otile magma"><div class="l">Planned profit</div><div class="v">${isk(plannedProfit)}</div><div class="sub">${builds.filter(b=>b.inPlan).length} builds in plan</div></div>`;
+  const soon=running.filter(j=>Date.parse(j.end)-now()<3600000).length;
+  let alerts='';
+  if(soon) alerts+=`<div class="alert soon"><span class="dot"></span>${soon} job${soon!==1?'s':''} completing within the hour</div>`;
+  if(ready.length) alerts+=`<div class="alert rdy"><span class="dot"></span>${ready.length} ready to deliver · ${isk(valueReady)} value</div>`;
+  document.getElementById('alertBar').innerHTML=alerts;
+  const next=running.slice().sort((a,b)=>Date.parse(a.end)-Date.parse(b.end)).slice(0,6);
+  document.getElementById('nextList').innerHTML = next.length ? `<div class="nextlist">`+next.map(j=>{
+    const a=ACT[j.activity], start=Date.parse(j.start), end=Date.parse(j.end), frac=end>start?(now()-start)/(end-start):1;
+    return `<div class="nextrow"><div><div class="nx-name"><span class="pdot" style="background:${a.color}"></span>${esc(j.product)}</div><div class="nx-sub">${a.short} · ${esc(pilotName(j.pilotId)||'Unassigned')}</div></div>
+      <div>${bar(frac,a.color)}</div><div class="nx-time">${durText(end-now())}</div></div>`;
+  }).join('')+`</div>` : emptyBox('No jobs running','Queue a build or add a job to populate your production timeline.','+ New job','openJob()');
+
+  /* jobs */
+  const fl=filteredJobs();
+  document.getElementById('jobGrid').innerHTML=fl.length?fl.map(jobCard).join(''):emptyBox('No matching jobs', jobs.length?'Nothing matches the current filters. Clear search or switch the status chip.':'Add a manufacturing, reaction, invention, copy or research job to track it here.', jobs.length?'':'+ New job', jobs.length?'':'openJob()');
+
+  /* slots */
+  document.getElementById('slotSummary').innerHTML=`
+    <div class="stile mfg"><div class="l">Manufacturing</div><div class="v">${used.mfg} / ${tot.mfg}</div><div class="sub">${Math.max(0,tot.mfg-used.mfg)} free</div></div>
+    <div class="stile sci"><div class="l">Science</div><div class="v">${used.sci} / ${tot.sci}</div><div class="sub">${Math.max(0,tot.sci-used.sci)} free</div></div>
+    <div class="stile rxn"><div class="l">Reaction</div><div class="v">${used.rxn} / ${tot.rxn}</div><div class="sub">${Math.max(0,tot.rxn-used.rxn)} free</div></div>
+    <div class="stile un"><div class="l">Unassigned jobs</div><div class="v">${unassigned}</div><div class="sub">no pilot set</div></div>`;
+  document.getElementById('pilotGrid').innerHTML=pilots.length?pilots.map(p=>pilotCard(p,usage)).join(''):emptyBox('No pilots yet','Register your industry characters and slot counts to track capacity and spot idle slots.','+ New pilot','openPilot()');
+
+  /* builds */
+  document.getElementById('buildGrid').innerHTML=builds.length?builds.map(buildCard).join(''):emptyBox('No builds planned','Add a build with materials, ME/TE and prices to see cost, profit and ISK/hr, then queue jobs straight from it.','+ New build','openBuild()');
+
+  /* stock + shopping */
+  renderStock();
+  /* job form filter dropdowns refresh */
+  refreshFilters();
+}
+function emptyBox(h,p,btn,fn){ return `<div class="empty" style="grid-column:1/-1"><h3>${h}</h3><p>${p}</p>${btn?`<button class="btn" onclick="${fn}">${btn}</button>`:''}</div>`; }
+
+function renderStock(){
+  const im=invMap();
+  document.getElementById('invWrap').innerHTML = items.length ? `<div class="tbl-wrap"><table>
+    <thead><tr><th class="l">Material</th><th>Qty on hand</th><th>Unit price</th><th>Stock value</th><th></th></tr></thead>
+    <tbody>${items.map(i=>`<tr><td class="l"><span class="nm">${esc(i.name)||'—'}</span></td>
+      <td>${(+i.qty||0).toLocaleString()}</td><td class="am">${isk(i.price)}</td><td class="cy">${isk((+i.qty||0)*(+i.price||0))}</td>
+      <td><div class="rowbtns"><button class="minibtn" onclick="openItem('${i.id}')">Edit</button><button class="minibtn danger" onclick="delItem('${i.id}')">Del</button></div></td></tr>`).join('')}</tbody>
+    <tfoot><tr><td class="l">Total — ${items.length} item${items.length!==1?'s':''}</td><td></td><td></td><td class="cy">${isk(items.reduce((s,i)=>s+(+i.qty||0)*(+i.price||0),0))}</td><td></td></tr></tfoot>
+    </table></div>` : emptyBox('No stock tracked','Add materials with quantities and unit prices. Prices feed every build automatically, and quantities drive the shopping list.','+ Stock item','openItem()');
+
+  /* shopping list */
+  const need={};
+  builds.filter(b=>b.inPlan).forEach(b=>{ buildCalc(b).mats.forEach(m=>{ if(!m.name) return; const k=m.name.toLowerCase();
+    if(!need[k]) need[k]={name:m.name, need:0, unit:m.unit}; need[k].need+=m.total; if(m.unit) need[k].unit=m.unit; }); });
+  const rows=Object.values(need).map(n=>{ const have=invQty(n.name,im), buy=Math.max(0,n.need-have), cost=buy*(n.unit||0); return {...n,have,buy,cost}; }).filter(n=>n.need>0);
+  rows.sort((a,b)=>b.cost-a.cost);
+  const totalBuy=rows.reduce((s,r)=>s+r.cost,0);
+  document.getElementById('shopWrap').innerHTML = rows.length ? `<div class="tbl-wrap"><table>
+    <thead><tr><th class="l">Material</th><th>Needed</th><th>In stock</th><th>To buy</th><th>Unit</th><th>Cost</th></tr></thead>
+    <tbody>${rows.map(r=>`<tr><td class="l"><span class="nm">${esc(r.name)}</span></td>
+      <td>${r.need.toLocaleString()}</td><td class="dim">${r.have.toLocaleString()}</td>
+      <td class="${r.buy>0?'am':'gr'}">${r.buy.toLocaleString()}</td><td class="dim">${isk(r.unit)}</td><td class="cy">${isk(r.cost)}</td></tr>`).join('')}</tbody>
+    <tfoot><tr><td class="l">Estimated buy cost</td><td></td><td></td><td></td><td></td><td class="cy">${isk(totalBuy)}</td></tr></tfoot>
+    </table></div>` : `<div class="empty"><p>Mark one or more builds as <b style="color:var(--magma)">In plan</b> (on the Builds tab) and any materials you're short on will be aggregated here into a buy list.</p></div>`;
+}
+
+function refreshFilters(){
+  const af=document.getElementById('actFilter'); if(af.options.length<=1){ Object.entries(ACT).forEach(([k,v])=>{const o=document.createElement('option');o.value=k;o.textContent=v.label;af.appendChild(o);}); af.value=jf.activity; }
+  const pf=document.getElementById('pilotFilter'); const cur=pf.value||jf.pilot;
+  pf.innerHTML='<option value="all">All pilots</option><option value="none">Unassigned</option>'+pilots.map(p=>`<option value="${p.id}">${esc(p.name)}</option>`).join('');
+  pf.value=cur&&[...pf.options].some(o=>o.value===cur)?cur:'all';
+}
+
+/* tabs */
+document.querySelectorAll('.tab').forEach(t=>t.addEventListener('click',()=>{
+  document.querySelectorAll('.tab').forEach(x=>x.classList.remove('on')); t.classList.add('on');
+  const map={overview:'sec-overview',jobs:'sec-jobs',slots:'sec-slots',builds:'sec-builds',stock:'sec-stock'};
+  Object.values(map).forEach(id=>document.getElementById(id).classList.add('hide'));
+  document.getElementById(map[t.dataset.sec]).classList.remove('hide');
+}));
+
+/* job filter controls */
+document.getElementById('jobSearch').addEventListener('input',e=>{jf.q=e.target.value;renderAll();});
+document.getElementById('actFilter').addEventListener('change',e=>{jf.activity=e.target.value;renderAll();});
+document.getElementById('pilotFilter').addEventListener('change',e=>{jf.pilot=e.target.value;renderAll();});
+document.getElementById('jobSort').addEventListener('change',e=>{jf.sort=e.target.value;renderAll();});
+document.querySelectorAll('#statusChips .fchip').forEach(c=>c.addEventListener('click',()=>{
+  document.querySelectorAll('#statusChips .fchip').forEach(x=>x.classList.remove('on')); c.classList.add('on'); jf.status=c.dataset.st; renderAll(); }));
+document.getElementById('deliverAll').onclick=async()=>{ const r=jobs.filter(j=>jobStatus(j)==='ready'); if(!r.length){toast('Nothing ready to deliver.');return;} jobs=jobs.filter(j=>jobStatus(j)!=='ready'); await saveAll(); toast('Delivered '+r.length+' job'+(r.length!==1?'s':'')+' — slots freed.'); };
+
+/* modal */
+const overlay=document.getElementById('overlay');
+function openModal(){overlay.classList.add('on');} function closeModal(){overlay.classList.remove('on');} window.closeModal=closeModal;
+function showScreen(n){['Chooser','Job','Pilot','Build','Item'].forEach(x=>document.getElementById('screen'+x).classList.add('hide')); document.getElementById('screen'+n).classList.remove('hide');}
+overlay.addEventListener('click',e=>{if(e.target===overlay)closeModal();});
+document.getElementById('addBtn').onclick=()=>{showScreen('Chooser');openModal();};
+document.getElementById('choiceJob').onclick=()=>openJob();
+document.getElementById('choicePilot').onclick=()=>openPilot();
+document.getElementById('choiceBuild').onclick=()=>openBuild();
+document.getElementById('choiceItem').onclick=()=>openItem();
+document.getElementById('addItemBtn').onclick=()=>openItem();
+['jobBack','pilotBack','buildBack','itemBack'].forEach(id=>document.getElementById(id).onclick=()=>showScreen('Chooser'));
+
+/* activity selects */
+[['jAct'],['bAct']].forEach(([id])=>{const s=document.getElementById(id);Object.entries(ACT).forEach(([k,v])=>{const o=document.createElement('option');o.value=k;o.textContent=v.label;s.appendChild(o);});});
+function fillJobSelects(jp,jb){
+  const sp=document.getElementById('jPilot'); sp.innerHTML='<option value="">Unassigned</option>'+pilots.map(p=>`<option value="${p.id}">${esc(p.name)}</option>`).join(''); if(jp)sp.value=jp;
+  const sb=document.getElementById('jBuild'); sb.innerHTML='<option value="">None</option>'+builds.map(b=>`<option value="${b.id}">${esc(b.name)}</option>`).join(''); if(jb)sb.value=jb;
+}
+
+/* JOB form */
+window.openJob=function(id){
+  editJob=id||null;
+  if(id){ const j=jobs.find(x=>x.id===id); if(!j)return; fillJobSelects(j.pilotId,j.buildId);
+    document.getElementById('jobTitle').textContent='Edit job'; document.getElementById('jobSub').textContent=j.product||'';
+    document.getElementById('jProduct').value=j.product||''; document.getElementById('jAct').value=j.activity; document.getElementById('jRuns').value=j.runs||1;
+    document.getElementById('jLoc').value=j.loc||''; document.getElementById('jStart').value=toLocalInput(j.start); document.getElementById('jEnd').value=toLocalInput(j.end);
+  } else { fillJobSelects();
+    document.getElementById('jobTitle').textContent='New job'; document.getElementById('jobSub').textContent='Track an industry job';
+    document.getElementById('jProduct').value=''; document.getElementById('jAct').value='manufacturing'; document.getElementById('jRuns').value=1;
+    document.getElementById('jLoc').value=''; document.getElementById('jStart').value=toLocalInput(); document.getElementById('jEnd').value=toLocalInput(new Date(now()+6*3600000).toISOString());
+  }
+  showScreen('Job'); openModal();
+};
+document.getElementById('jobSave').onclick=async()=>{
+  const product=document.getElementById('jProduct').value.trim(); if(!product){document.getElementById('jProduct').focus();return;}
+  const o={ id:editJob||uid('j'), created:(editJob?(jobs.find(x=>x.id===editJob)||{}).created:0)||now(),
+    product, activity:document.getElementById('jAct').value, runs:+document.getElementById('jRuns').value||1,
+    pilotId:document.getElementById('jPilot').value||null, buildId:document.getElementById('jBuild').value||null,
+    loc:document.getElementById('jLoc').value.trim(),
+    start:new Date(document.getElementById('jStart').value||Date.now()).toISOString(),
+    end:new Date(document.getElementById('jEnd').value||Date.now()).toISOString() };
+  if(editJob){const i=jobs.findIndex(x=>x.id===editJob);jobs[i]=o;} else jobs.push(o);
+  closeModal(); await saveAll();
+};
+window.deliver=async(id)=>{jobs=jobs.filter(j=>j.id!==id);await saveAll();toast('Job delivered — slot freed.');};
+window.delJob=async(id)=>{if(confirm('Delete this job?')){jobs=jobs.filter(j=>j.id!==id);await saveAll();}};
+window.queueJob=function(buildId){ const b=builds.find(x=>x.id===buildId); if(!b)return; fillJobSelects(null,buildId);
+  editJob=null;
+  document.getElementById('jobTitle').textContent='Queue job from build'; document.getElementById('jobSub').textContent=b.name||'';
+  document.getElementById('jProduct').value=b.name||''; document.getElementById('jAct').value=b.activity||'manufacturing'; document.getElementById('jRuns').value=b.runs||1;
+  document.getElementById('jLoc').value='';
+  document.getElementById('jStart').value=toLocalInput();
+  const c=buildCalc(b); const hrs=c.totalTime>0?c.totalTime:6;
+  document.getElementById('jEnd').value=toLocalInput(new Date(now()+hrs*3600000).toISOString());
+  showScreen('Job'); openModal();
+};
+
+/* PILOT form */
+window.openPilot=function(id){ editPilot=id||null;
+  if(id){const p=pilots.find(x=>x.id===id);if(!p)return; document.getElementById('pilotTitle').textContent='Edit pilot';
+    document.getElementById('pName').value=p.name||'';document.getElementById('pMfg').value=p.mfg;document.getElementById('pSci').value=p.sci;document.getElementById('pRxn').value=p.rxn;
+  } else {document.getElementById('pilotTitle').textContent='New pilot';document.getElementById('pName').value='';document.getElementById('pMfg').value=1;document.getElementById('pSci').value=1;document.getElementById('pRxn').value=1;}
+  showScreen('Pilot'); openModal(); };
+document.getElementById('pilotSave').onclick=async()=>{ const name=document.getElementById('pName').value.trim(); if(!name){document.getElementById('pName').focus();return;}
+  const o={id:editPilot||uid('p'),name,mfg:+document.getElementById('pMfg').value||0,sci:+document.getElementById('pSci').value||0,rxn:+document.getElementById('pRxn').value||0};
+  if(editPilot){const i=pilots.findIndex(x=>x.id===editPilot);pilots[i]=o;} else pilots.push(o);
+  closeModal(); await saveAll(); };
+window.delPilot=async(id)=>{if(confirm('Delete this pilot? Their jobs become unassigned.')){pilots=pilots.filter(p=>p.id!==id);jobs.forEach(j=>{if(j.pilotId===id)j.pilotId=null;});await saveAll();}};
+
+/* BUILD form */
+function matRowHtml(m){ m=m||{name:'',qty:'',price:''};
+  return `<div class="matrow"><input class="m-name" placeholder="material" value="${esc(m.name)}" list="matNames">
+    <input class="m-qty" type="number" min="0" placeholder="0" value="${m.qty??''}">
+    <input class="m-price" type="number" min="0" placeholder="auto" value="${m.price??''}">
+    <button class="matx" onclick="this.parentElement.remove();recalc()">×</button></div>`; }
+function readMaterials(){ return [...document.querySelectorAll('#matRows .matrow')].map(r=>({name:r.querySelector('.m-name').value.trim(),qty:+r.querySelector('.m-qty').value||0,price:+r.querySelector('.m-price').value||0})).filter(m=>m.name||m.qty); }
+function readBuildForm(){ return { activity:document.getElementById('bAct').value, runs:+document.getElementById('bRuns').value||1, units:+document.getElementById('bUnits').value||1,
+  time:+document.getElementById('bTime').value||0, me:+document.getElementById('bME').value||0, te:+document.getElementById('bTE').value||0, fac:+document.getElementById('bFac').value||0,
+  sell:+document.getElementById('bSell').value||0, fee:+document.getElementById('bFee').value||0, inPlan:document.getElementById('bPlan').checked, materials:readMaterials() }; }
+function recalc(){ const c=buildCalc(readBuildForm());
+  document.getElementById('calcBar').innerHTML=`<span>Cost <b>${isk(c.totalCost)}</b></span><span>Revenue <b>${isk(c.revenue)}</b></span><span>${c.totalTime>0?'ISK/hr <b>'+isk(c.iskPerHr)+'</b>':''}</span><span style="color:${c.profit>=0?'var(--green)':'var(--red)'}">Profit <b style="color:inherit">${c.profit>=0?'+':''}${isk(c.profit)}</b> · ${c.margin.toFixed(1)}%</span>`; }
+window.recalc=recalc;
+window.openBuild=function(id){ editBuild=id||null; const rows=document.getElementById('matRows');
+  if(id){const b=builds.find(x=>x.id===id);if(!b)return; document.getElementById('buildTitle').textContent='Edit build';
+    document.getElementById('bName').value=b.name||''; document.getElementById('bAct').value=b.activity||'manufacturing';
+    document.getElementById('bRuns').value=b.runs||1; document.getElementById('bUnits').value=b.units||1; document.getElementById('bTime').value=b.time||0;
+    document.getElementById('bME').value=b.me||0; document.getElementById('bTE').value=b.te||0; document.getElementById('bFac').value=b.fac||0;
+    document.getElementById('bSell').value=b.sell||''; document.getElementById('bFee').value=b.fee||''; document.getElementById('bPlan').checked=!!b.inPlan;
+    rows.innerHTML=(b.materials&&b.materials.length?b.materials:[{}]).map(matRowHtml).join('');
+  } else { document.getElementById('buildTitle').textContent='New build';
+    ['bName','bSell','bFee'].forEach(i=>document.getElementById(i).value=''); document.getElementById('bAct').value='manufacturing';
+    document.getElementById('bRuns').value=1;document.getElementById('bUnits').value=1;document.getElementById('bTime').value=0;
+    document.getElementById('bME').value=0;document.getElementById('bTE').value=0;document.getElementById('bFac').value=0;document.getElementById('bPlan').checked=false;
+    rows.innerHTML=[matRowHtml(),matRowHtml(),matRowHtml()].join('');
+  }
+  // datalist of known materials
+  let dl=document.getElementById('matNames'); if(!dl){dl=document.createElement('datalist');dl.id='matNames';document.body.appendChild(dl);}
+  dl.innerHTML=items.map(i=>`<option value="${esc(i.name)}">`).join('');
+  showScreen('Build'); openModal(); recalc();
+};
+document.getElementById('addMat').onclick=()=>{document.getElementById('matRows').insertAdjacentHTML('beforeend',matRowHtml());recalc();};
+['bRuns','bUnits','bTime','bME','bTE','bFac','bSell','bFee'].forEach(id=>document.getElementById(id).addEventListener('input',recalc));
+document.getElementById('matRows').addEventListener('input',recalc);
+document.getElementById('buildSave').onclick=async()=>{ const name=document.getElementById('bName').value.trim(); if(!name){document.getElementById('bName').focus();return;}
+  const o={id:editBuild||uid('b'),name,...readBuildForm()};
+  if(editBuild){const i=builds.findIndex(x=>x.id===editBuild);builds[i]=o;} else builds.push(o);
+  closeModal(); await saveAll(); };
+window.toggleInPlan=async(id)=>{const b=builds.find(x=>x.id===id);if(b){b.inPlan=!b.inPlan;await saveAll();}};
+window.dupBuild=async(id)=>{const b=builds.find(x=>x.id===id);if(!b)return;const c=JSON.parse(JSON.stringify(b));c.id=uid('b');c.name=(b.name||'Build')+' (copy)';builds.push(c);await saveAll();toast('Build duplicated.');};
+window.delBuild=async(id)=>{if(confirm('Delete this build?')){builds=builds.filter(b=>b.id!==id);jobs.forEach(j=>{if(j.buildId===id)j.buildId=null;});await saveAll();}};
+
+/* ITEM form */
+window.openItem=function(id){ editItem=id||null;
+  if(id){const it=items.find(x=>x.id===id);if(!it)return;document.getElementById('itemTitle').textContent='Edit stock item';
+    document.getElementById('iName').value=it.name||'';document.getElementById('iQty').value=it.qty??0;document.getElementById('iPrice').value=it.price??'';
+  } else {document.getElementById('itemTitle').textContent='New stock item';document.getElementById('iName').value='';document.getElementById('iQty').value=0;document.getElementById('iPrice').value='';}
+  showScreen('Item'); openModal(); };
+document.getElementById('itemSave').onclick=async()=>{ const name=document.getElementById('iName').value.trim(); if(!name){document.getElementById('iName').focus();return;}
+  const o={id:editItem||uid('i'),name,qty:+document.getElementById('iQty').value||0,price:+document.getElementById('iPrice').value||0};
+  if(editItem){const i=items.findIndex(x=>x.id===editItem);items[i]=o;} else items.push(o);
+  closeModal(); await saveAll(); };
+window.delItem=async(id)=>{if(confirm('Delete this stock item?')){items=items.filter(i=>i.id!==id);await saveAll();}};
+
+/* backup */
+document.getElementById('exportBtn').onclick=()=>{ const blob=new Blob([JSON.stringify({jobs,pilots,builds,items,exported:new Date().toISOString()},null,2)],{type:'application/json'});
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='industry-ops-backup.json'; a.click(); setTimeout(()=>URL.revokeObjectURL(a.href),1000); toast('Backup downloaded.'); };
+document.getElementById('importBtn').onclick=()=>document.getElementById('importFile').click();
+document.getElementById('importFile').onchange=e=>{ const f=e.target.files[0]; if(!f)return; const rd=new FileReader();
+  rd.onload=async()=>{ try{ const d=JSON.parse(rd.result); if(!confirm('Replace all current data with this backup?'))return;
+    jobs=d.jobs||[];pilots=d.pilots||[];builds=d.builds||[];items=d.items||[]; await saveAll(); toast('Backup restored.'); }catch(err){ toast('Could not read that file.'); } };
+  rd.readAsText(f); e.target.value=''; };
+
+/* toast */
+let toastT; function toast(m){const e=document.getElementById('toast');e.textContent=m;e.classList.add('show');clearTimeout(toastT);toastT=setTimeout(()=>e.classList.remove('show'),4200);}
+
+/* init */
+setInterval(()=>{ if(jobs.length) renderAll(); }, 30000);
+(async function init(){
+  jobs=(await sGet(K_JOBS))||[]; pilots=(await sGet(K_PILOTS))||[]; builds=(await sGet(K_BUILDS))||[]; items=(await sGet(K_ITEMS))||[];
+  renderAll();
+})();
+</script>
+</body>
+</html>
