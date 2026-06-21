@@ -1,0 +1,767 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>FOUNDRY // EVE Industrial Overseer</title>
+
+<!-- Tailwind (CDN build, fine for a static GitHub Pages SPA) -->
+<script src="https://cdn.tailwindcss.com"></script>
+<!-- EVE-flavoured monospace + display faces -->
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@500;700&display=swap" rel="stylesheet" />
+
+<script>
+  tailwind.config = {
+    theme: {
+      extend: {
+        fontFamily: {
+          mono: ['"Share Tech Mono"', 'ui-monospace', 'monospace'],
+          display: ['"Orbitron"', 'ui-monospace', 'monospace'],
+        },
+        colors: {
+          void:    '#06090c',
+          hull:    '#0a0f14',
+          panel:   '#0d141b',
+          line:    '#1b2731',
+          line2:   '#273744',
+          cyan:    '#3ad3e8',
+          cyandim: '#1c6f7c',
+          amber:   '#e8a13a',
+          green:   '#5ce89a',
+          red:     '#ff5247',
+          dim:     '#5d6b76',
+          ink:     '#aebcc6',
+        },
+      },
+    },
+  };
+</script>
+
+<style>
+  :root {
+    --cyan: #3ad3e8;
+    --amber: #e8a13a;
+    --red: #ff5247;
+    --line: #1b2731;
+  }
+  html, body { background: #06090c; }
+  body {
+    font-family: '"Share Tech Mono"', monospace;
+    color: #aebcc6;
+    /* faint horizontal scanline texture, very EVE */
+    background-image:
+      repeating-linear-gradient(0deg, rgba(58,211,232,0.018) 0px, rgba(58,211,232,0.018) 1px, transparent 1px, transparent 3px),
+      radial-gradient(1200px 600px at 70% -10%, rgba(58,211,232,0.06), transparent 60%);
+    background-attachment: fixed;
+  }
+  .font-display { font-family: 'Orbitron', monospace; }
+
+  /* EVE-style bracket panel: clipped corners + corner ticks */
+  .bracket {
+    position: relative;
+    background: linear-gradient(180deg, #0d141b 0%, #0a0f14 100%);
+    border: 1px solid var(--line);
+    clip-path: polygon(0 10px, 10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%);
+  }
+  .bracket::before, .bracket::after {
+    content: ''; position: absolute; width: 11px; height: 11px; pointer-events: none;
+    border-color: var(--cyan); opacity: 0.7;
+  }
+  .bracket::before { top: -1px; right: -1px; border-top: 2px solid; border-right: 2px solid; }
+  .bracket::after  { bottom: -1px; left: -1px; border-bottom: 2px solid; border-left: 2px solid; }
+
+  .eve-label { letter-spacing: 0.18em; text-transform: uppercase; }
+
+  /* tab buttons */
+  .tab-btn { position: relative; transition: color .15s, background .15s; }
+  .tab-btn[aria-selected="true"] { color: var(--cyan); background: rgba(58,211,232,0.06); }
+  .tab-btn[aria-selected="true"]::after {
+    content: ''; position: absolute; left: 0; right: 0; bottom: -1px; height: 2px; background: var(--cyan);
+    box-shadow: 0 0 10px var(--cyan);
+  }
+
+  table { border-collapse: collapse; width: 100%; }
+  thead th {
+    position: sticky; top: 0; z-index: 2;
+    background: #0b1117; color: var(--cyan);
+    letter-spacing: 0.12em; text-transform: uppercase; font-size: 11px;
+    text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--line2, #273744);
+    white-space: nowrap;
+  }
+  tbody td { padding: 8px 12px; border-bottom: 1px solid rgba(27,39,49,0.7); font-size: 13px; vertical-align: top; }
+  tbody tr:hover { background: rgba(58,211,232,0.04); }
+
+  .pill { display:inline-block; padding: 1px 7px; font-size: 11px; letter-spacing:.06em; border:1px solid; border-radius: 2px; }
+  .pill-t1     { color:#9fb4c0; border-color:#2f4250; }
+  .pill-t2     { color:var(--cyan); border-color:var(--cyan); }
+  .pill-faction{ color:var(--amber); border-color:var(--amber); }
+  .pill-t3     { color:#c08bff; border-color:#7a4fd0; }
+  .pill-officer{ color:var(--red); border-color:var(--red); }
+
+  .stat-ok    { color: var(--green, #5ce89a); }
+  .stat-warn  { color: var(--amber); }
+  .stat-crit  { color: var(--red); }
+
+  /* blinking critical banner */
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.45} }
+  .crit-pulse { animation: pulse 1.1s ease-in-out infinite; }
+
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: #06090c; }
+  ::-webkit-scrollbar-thumb { background: #1b2731; border: 1px solid #273744; }
+  ::-webkit-scrollbar-thumb:hover { background: #27414f; }
+
+  @media (prefers-reduced-motion: reduce) { .crit-pulse { animation: none; } }
+
+  :focus-visible { outline: 2px solid var(--cyan); outline-offset: 2px; }
+
+  /* styles reused inside the Picture-in-Picture HUD window */
+  .pip-body { background:#000 !important; color:#aebcc6; font-family:'"Share Tech Mono"',monospace; margin:0; padding:6px; }
+</style>
+</head>
+
+<body class="min-h-screen font-mono text-ink antialiased">
+
+<!-- ===================== TOP BAR ===================== -->
+<header class="border-b border-line bg-hull/80 backdrop-blur sticky top-0 z-40">
+  <div class="max-w-[1500px] mx-auto px-4 py-2.5 flex items-center gap-4 flex-wrap">
+    <div class="flex items-center gap-3">
+      <div class="w-7 h-7 bracket flex items-center justify-center text-cyan font-display text-sm">F</div>
+      <div>
+        <h1 class="font-display text-cyan text-base leading-none">FOUNDRY</h1>
+        <p class="text-[10px] eve-label text-dim leading-none mt-1">Industrial Overseer · ESI</p>
+      </div>
+    </div>
+
+    <div class="flex items-center gap-2 ml-auto text-[11px]">
+      <span id="data-mode" class="pill pill-faction eve-label">MOCK DATA</span>
+      <select id="char-select" class="bg-panel border border-line text-ink text-xs px-2 py-1.5 eve-label focus:border-cyan">
+        <option value="all">ALL PILOTS</option>
+      </select>
+      <button id="login-btn" class="bracket px-3 py-1.5 eve-label text-cyan hover:bg-cyan/10">EVE SSO LOGIN</button>
+      <button id="popout-btn" class="bracket px-3 py-1.5 eve-label text-amber hover:bg-amber/10" title="Float a borderless always-on-top HUD over the EVE client">
+        ▣ POP OUT MONITOR (KEEP ON TOP)
+      </button>
+    </div>
+  </div>
+
+  <!-- tab strip -->
+  <nav class="max-w-[1500px] mx-auto px-2 flex overflow-x-auto" role="tablist" aria-label="Views">
+    <button class="tab-btn eve-label text-dim px-4 py-3 text-xs whitespace-nowrap" role="tab" data-tab="assets"      aria-selected="true">01 · Asset Locator</button>
+    <button class="tab-btn eve-label text-dim px-4 py-3 text-xs whitespace-nowrap" role="tab" data-tab="blueprints"  aria-selected="false">02 · BPO Gap Analysis</button>
+    <button class="tab-btn eve-label text-dim px-4 py-3 text-xs whitespace-nowrap" role="tab" data-tab="production"  aria-selected="false">03 · Production Lines</button>
+    <button class="tab-btn eve-label text-dim px-4 py-3 text-xs whitespace-nowrap" role="tab" data-tab="fuel"        aria-selected="false">04 · Fuel & Decommission</button>
+    <button class="tab-btn eve-label text-dim px-4 py-3 text-xs whitespace-nowrap" role="tab" data-tab="refineries"  aria-selected="false">05 · Idle Refineries</button>
+  </nav>
+</header>
+
+<!-- ===================== MAIN ===================== -->
+<main class="max-w-[1500px] mx-auto px-4 py-5">
+
+  <!-- ---------- TAB 1: ASSET LOCATOR ---------- -->
+  <section id="tab-assets" data-panel class="space-y-3">
+    <div class="flex items-center gap-3 flex-wrap">
+      <h2 class="font-display text-cyan text-sm eve-label">Asset Locator</h2>
+      <span class="text-[11px] text-dim">Cross-character + corporate hangar aggregation</span>
+      <div class="ml-auto flex items-center gap-2">
+        <span class="text-cyan text-xs">⌕</span>
+        <input id="asset-search" type="text" placeholder="FILTER ITEM / OWNER / SYSTEM / HANGAR…"
+               class="bg-panel border border-line text-ink text-xs px-3 py-2 w-72 eve-label focus:border-cyan placeholder:text-dim" />
+        <span id="asset-count" class="text-[11px] text-dim eve-label"></span>
+      </div>
+    </div>
+    <div class="bracket overflow-auto max-h-[68vh]">
+      <table>
+        <thead>
+          <tr>
+            <th>Item Name</th><th>Variant / Tier</th><th class="text-right">Quantity</th>
+            <th>Owner</th><th>System</th><th>Station / Structure</th><th>Hangar / Container</th>
+          </tr>
+        </thead>
+        <tbody id="asset-body"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ---------- TAB 2: BLUEPRINT GAP ---------- -->
+  <section id="tab-blueprints" data-panel hidden class="space-y-3">
+    <div class="flex items-center gap-3 flex-wrap">
+      <h2 class="font-display text-cyan text-sm eve-label">BPO Gap Analysis</h2>
+      <span class="text-[11px] text-dim">SDE target set minus owned Blueprint Originals (qty = −1)</span>
+      <div class="ml-auto flex items-center gap-3 text-[11px] eve-label">
+        <span class="text-green">OWNED <b id="bpo-owned">0</b></span>
+        <span class="text-red">MISSING <b id="bpo-missing">0</b></span>
+        <span class="text-dim">TARGET <b id="bpo-total">0</b></span>
+      </div>
+    </div>
+    <div class="bracket overflow-auto max-h-[68vh]">
+      <table>
+        <thead><tr><th>Blueprint (Missing BPO)</th><th>Hull Class</th><th>Type ID</th><th>Status</th></tr></thead>
+        <tbody id="bpo-body"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ---------- TAB 3: PRODUCTION ---------- -->
+  <section id="tab-production" data-panel hidden class="space-y-3">
+    <div class="flex items-center gap-3 flex-wrap">
+      <h2 class="font-display text-cyan text-sm eve-label">Production Lines</h2>
+      <span class="text-[11px] text-dim">Active manufacturing jobs · character &amp; corporation</span>
+    </div>
+    <div class="bracket overflow-auto max-h-[68vh]">
+      <table>
+        <thead>
+          <tr><th>Output</th><th class="text-right">Runs / Qty</th><th>Owner</th><th>Facility</th><th>Activity</th><th class="text-right">Delivers In</th></tr>
+        </thead>
+        <tbody id="prod-body"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ---------- TAB 4: FUEL & DECOMMISSION ---------- -->
+  <section id="tab-fuel" data-panel hidden class="space-y-3">
+    <div id="unanchor-banner" class="bracket border-red bg-red/10 px-4 py-3 hidden">
+      <div class="flex items-center gap-3 flex-wrap">
+        <span class="font-display text-red text-sm eve-label crit-pulse">⚠ STRUCTURE DECOMMISSION IN PROGRESS</span>
+        <span id="unanchor-detail" class="text-red text-xs"></span>
+        <span class="ml-auto font-display text-red text-lg" data-countdown id="unanchor-timer">--:--:--</span>
+      </div>
+    </div>
+    <div class="flex items-center gap-3 flex-wrap">
+      <h2 class="font-display text-cyan text-sm eve-label">Fuel Manager &amp; Decommission Monitor</h2>
+      <span class="text-[11px] text-dim">Forecast = Σ service-module burn × interval</span>
+    </div>
+    <div class="bracket overflow-auto max-h-[64vh]">
+      <table>
+        <thead>
+          <tr>
+            <th>Structure</th><th>System</th><th>Active Services</th>
+            <th class="text-right">Burn /hr</th><th class="text-right">Blocks Now</th>
+            <th class="text-right">Daily Target</th><th class="text-right">Weekly Target</th><th class="text-right">Monthly Target</th>
+            <th>Runs Dry</th>
+          </tr>
+        </thead>
+        <tbody id="fuel-body"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ---------- TAB 5: IDLE REFINERIES ---------- -->
+  <section id="tab-refineries" data-panel hidden class="space-y-3">
+    <div class="flex items-center gap-3 flex-wrap">
+      <h2 class="font-display text-cyan text-sm eve-label">Idle Refineries · Exclusion Matrix</h2>
+      <span class="text-[11px] text-dim">Athanor (35835) + Tatara (35836) − active extractions</span>
+      <span id="ref-summary" class="ml-auto text-[11px] text-dim eve-label"></span>
+    </div>
+    <div class="bracket overflow-auto max-h-[68vh]">
+      <table>
+        <thead><tr><th>Structure ID</th><th>Refinery Class</th><th>Solar System</th><th>Fuel Status</th></tr></thead>
+        <tbody id="ref-body"></tbody>
+      </table>
+    </div>
+  </section>
+
+</main>
+
+<footer class="max-w-[1500px] mx-auto px-4 py-6 text-[10px] text-dim eve-label border-t border-line mt-6">
+  FOUNDRY is an unofficial third-party tool · EVE Online &amp; ESI are trademarks of CCP hf · Not affiliated with or endorsed by CCP
+</footer>
+
+<script>
+/* =========================================================================
+ * FOUNDRY — EVE Online Industrial Overseer
+ * Single-file client-side SPA. No build step. Drop in as index.html on
+ * GitHub Pages. Runs fully offline against embedded mock data until you
+ * set CONFIG.CLIENT_ID and flip CONFIG.USE_MOCK = false.
+ * ======================================================================= */
+
+/* ----------------------------- CONFIG ---------------------------------- */
+const CONFIG = {
+  // 1) Register an app at https://developers.eveonline.com/ (type: PKCE / no secret).
+  // 2) Set the callback to the exact GitHub Pages URL hosting this file.
+  // 3) Paste the Client ID below and set USE_MOCK = false.
+  CLIENT_ID: '',
+  CALLBACK_URL: location.origin + location.pathname,
+  SCOPES: [
+    'esi-assets.read_assets.v1',
+    'esi-assets.read_corporation_assets.v1',
+    'esi-characters.read_blueprints.v1',
+    'esi-corporations.read_blueprints.v1',
+    'esi-industry.read_character_jobs.v1',
+    'esi-industry.read_corporation_jobs.v1',
+    'esi-corporations.read_structures.v1',
+    'esi-industry.read_corporation_mining.v1',
+    'esi-universe.read_structures.v1',
+  ],
+  AUTH_BASE: 'https://login.eveonline.com/v2/oauth/authorize',
+  TOKEN_URL: 'https://login.eveonline.com/v2/oauth/token',
+  ESI_BASE:  'https://esi.evetech.net/latest',
+  CACHE_TTL_MS: 5 * 60 * 1000, // 5 min ESI cache window
+  USE_MOCK: true,              // <-- flip to false once CLIENT_ID is set
+};
+
+/* -------------------- STRUCTURE / SDE CONSTANTS ------------------------ */
+const REFINERY_TYPE_IDS = { 35835: 'Athanor', 35836: 'Tatara' };
+
+// Fuel-block burn per hour by service module (representative values).
+const SERVICE_BURN = {
+  'Reprocessing':        10, 'Moon Drilling':      5,  'Manufacturing':   12,
+  'Research':            6,  'Invention':          8,  'Market':          40,
+  'Clone Bay':           15, 'Cynosural Jammer':   30, 'Composite Reactor': 15,
+};
+
+// Tech 1 subcapital hull BPO target set (the gap-analysis "should own" list).
+// NOTE: type_id below are the BLUEPRINT type_ids ESI returns. Verify against the
+// current SDE (fuzzwork / CCP SDE) before going live — they are easy to mistype.
+const SDE_T1_SHIP_BPOS = [
+  { type_id: 957,   name: 'Merlin Blueprint',     hull: 'Frigate'    },
+  { type_id: 939,   name: 'Incursus Blueprint',   hull: 'Frigate'    },
+  { type_id: 944,   name: 'Punisher Blueprint',   hull: 'Frigate'    },
+  { type_id: 949,   name: 'Rifter Blueprint',     hull: 'Frigate'    },
+  { type_id: 977,   name: 'Vexor Blueprint',      hull: 'Cruiser'    },
+  { type_id: 972,   name: 'Caracal Blueprint',    hull: 'Cruiser'    },
+  { type_id: 2363,  name: 'Omen Blueprint',       hull: 'Cruiser'    },
+  { type_id: 967,   name: 'Stabber Blueprint',    hull: 'Cruiser'    },
+  { type_id: 24699, name: 'Drake Blueprint',      hull: 'Battlecruiser' },
+  { type_id: 16230, name: 'Brutix Blueprint',     hull: 'Battlecruiser' },
+  { type_id: 24703, name: 'Hurricane Blueprint',  hull: 'Battlecruiser' },
+  { type_id: 24697, name: 'Harbinger Blueprint',  hull: 'Battlecruiser' },
+  { type_id: 691,   name: 'Raven Blueprint',      hull: 'Battleship' },
+  { type_id: 24689, name: 'Rokh Blueprint',       hull: 'Battleship' },
+  { type_id: 24693, name: 'Abaddon Blueprint',    hull: 'Battleship' },
+  { type_id: 24683, name: 'Maelstrom Blueprint',  hull: 'Battleship' },
+];
+
+/* ============================ MOCK DATA =============================== *
+ * Shaped exactly like the normalized objects the ESI layer produces, so
+ * the engines below run identically against mock or live data.
+ * ===================================================================== */
+const inFuture = (h, m = 0) => new Date(Date.now() + (h * 3600 + m * 60) * 1000).toISOString();
+
+const MOCK_CHARACTERS = [
+  { id: 91000001, name: 'Vael Korrin' },
+  { id: 91000002, name: 'Tessa Dren' },
+  { id: 98000777, name: 'BLACK SUN INDUSTRIES', corp: true },
+];
+
+const MOCK_ASSETS = [
+  { name: 'Tritanium',                tier: 'T1',      qty: 4250000, owner: 'BLACK SUN INDUSTRIES', system: 'Jita',     station: 'Jita IV - Moon 4 - Caldari Navy Assembly Plant', hangar: 'Corp Hangar 2 (Minerals)' },
+  { name: 'Mexallon',                 tier: 'T1',      qty: 880000,  owner: 'BLACK SUN INDUSTRIES', system: 'Jita',     station: 'Jita IV - Moon 4 - Caldari Navy Assembly Plant', hangar: 'Corp Hangar 2 (Minerals)' },
+  { name: 'Caracal',                  tier: 'T1',      qty: 12,      owner: 'Vael Korrin',          system: 'Dodixie',  station: 'Dodixie IX - Moon 20 - FNAP',                    hangar: 'Hangar' },
+  { name: 'Caracal Navy Issue',       tier: 'Faction', qty: 2,       owner: 'Vael Korrin',          system: 'Dodixie',  station: 'Dodixie IX - Moon 20 - FNAP',                    hangar: 'Ship Hangar' },
+  { name: 'Damage Control II',        tier: 'T2',      qty: 340,     owner: 'Tessa Dren',           system: 'Amarr',    station: 'Amarr VIII (Oris) - Emperor Family Academy',     hangar: 'Hangar' },
+  { name: 'Imperial Navy Multifreq.', tier: 'Faction', qty: 96,      owner: 'Tessa Dren',           system: 'Amarr',    station: 'Amarr VIII (Oris) - Emperor Family Academy',     hangar: 'Hangar' },
+  { name: 'Loki',                     tier: 'T3',      qty: 1,        owner: 'Vael Korrin',          system: 'Hek',      station: 'Hek VIII - Moon 12 - Boundless Creation',        hangar: 'Ship Hangar' },
+  { name: 'Gist X-Type Shield Boost', tier: 'Officer', qty: 1,       owner: 'Vael Korrin',          system: 'Hek',      station: 'Hek VIII - Moon 12 - Boundless Creation',        hangar: 'Hangar' },
+  { name: 'Nanite Repair Paste',      tier: 'T1',      qty: 5000,    owner: 'Tessa Dren',           system: 'Amarr',    station: 'Amarr VIII (Oris) - Emperor Family Academy',     hangar: 'Hangar' },
+  { name: 'Warrior II',               tier: 'T2',      qty: 250,     owner: 'BLACK SUN INDUSTRIES', system: 'Sobaseki',  station: 'Sobaseki II - Athanor [BSI Refine-01]',          hangar: 'Corp Hangar 4 (Drones)' },
+  { name: 'Helium Isotopes',          tier: 'T1',      qty: 120000,  owner: 'BLACK SUN INDUSTRIES', system: 'Sobaseki',  station: 'Sobaseki II - Athanor [BSI Refine-01]',          hangar: 'Fuel Bay' },
+  { name: 'Vexor',                    tier: 'T1',      qty: 5,       owner: 'Vael Korrin',          system: 'Dodixie',  station: 'Dodixie IX - Moon 20 - FNAP',                    hangar: 'Ship Hangar' },
+];
+
+// Live blueprint inventory. quantity === -1 means BPO (original); >0 means BPC stack.
+const MOCK_BLUEPRINTS = [
+  { type_id: 957,   name: 'Merlin Blueprint',    quantity: -1, owner: 'Vael Korrin' },
+  { type_id: 939,   name: 'Incursus Blueprint',  quantity: -1, owner: 'Vael Korrin' },
+  { type_id: 977,   name: 'Vexor Blueprint',     quantity: -1, owner: 'BLACK SUN INDUSTRIES' },
+  { type_id: 972,   name: 'Caracal Blueprint',   quantity: -1, owner: 'BLACK SUN INDUSTRIES' },
+  { type_id: 691,   name: 'Raven Blueprint',     quantity: -1, owner: 'Tessa Dren' },
+  { type_id: 24699, name: 'Drake Blueprint',     quantity: -1, owner: 'BLACK SUN INDUSTRIES' },
+  // BPC copies (quantity > 0) — must be IGNORED by the BPO engine:
+  { type_id: 944,   name: 'Punisher Blueprint',  quantity: 10, owner: 'Tessa Dren' },
+  { type_id: 949,   name: 'Rifter Blueprint',    quantity: 25, owner: 'Vael Korrin' },
+];
+
+const MOCK_INDUSTRY_JOBS = [
+  { output: 'Caracal',          qty: 10, owner: 'Vael Korrin',          facility: 'Dodixie IX-20 - FNAP',        activity: 'Manufacturing', end_date: inFuture(2, 14) },
+  { output: 'Drake',            qty: 4,  owner: 'BLACK SUN INDUSTRIES', facility: 'Sobaseki II - Raitaru [BSI]', activity: 'Manufacturing', end_date: inFuture(11, 5) },
+  { output: 'Vexor Blueprint',  qty: 1,  owner: 'BLACK SUN INDUSTRIES', facility: 'Sobaseki II - Raitaru [BSI]', activity: 'Material Research', end_date: inFuture(0, 47) },
+  { output: 'Damage Control II',qty: 200,owner: 'Tessa Dren',           facility: 'Amarr VIII - EFA',            activity: 'Manufacturing', end_date: inFuture(0, 3) },
+  { output: 'Warrior II',       qty: 500,owner: 'BLACK SUN INDUSTRIES', facility: 'Sobaseki II - Athanor',       activity: 'Manufacturing', end_date: inFuture(33, 0) },
+];
+
+const MOCK_STRUCTURES = [
+  { id: 1035001, name: 'BSI Refine-01',  type: 'Athanor',  system: 'Sobaseki', services: ['Reprocessing','Moon Drilling'],           fuel_blocks: 9200,  unanchors_at: null },
+  { id: 1035002, name: 'BSI Forge',      type: 'Raitaru',  system: 'Sobaseki', services: ['Manufacturing','Research','Invention'],   fuel_blocks: 1400,  unanchors_at: null },
+  { id: 1035003, name: 'BSI Citadel',    type: 'Astrahus', system: 'Hek',      services: ['Market','Clone Bay'],                     fuel_blocks: 60000, unanchors_at: null },
+  { id: 1035004, name: 'Old Outpost',    type: 'Astrahus', system: 'Renarelle',services: ['Clone Bay'],                              fuel_blocks: 300,   unanchors_at: inFuture(7, 42) }, // DECOMMISSIONING
+];
+
+// Corp structures (refinery filter source) + the active extraction log.
+const MOCK_CORP_STRUCTURES = [
+  { structure_id: 1040001, type_id: 35835, system: 'Sobaseki',  fuel_blocks: 9200 },
+  { structure_id: 1040002, type_id: 35836, system: 'Aydoteaux', fuel_blocks: 220  },
+  { structure_id: 1040003, type_id: 35835, system: 'Renyn',     fuel_blocks: 0    },
+  { structure_id: 1040004, type_id: 35836, system: 'Frarn',     fuel_blocks: 4100 },
+  { structure_id: 1040005, type_id: 35835, system: 'Eystur',    fuel_blocks: 1500 },
+  { structure_id: 1040006, type_id: 16213, system: 'Jita',      fuel_blocks: 9999 }, // NOT a refinery → excluded by type filter
+];
+const MOCK_ACTIVE_EXTRACTIONS = [
+  { structure_id: 1040001 }, // mining now → excluded from idle view
+  { structure_id: 1040004 }, // mining now → excluded
+];
+
+/* ====================== ESI / OAUTH (PKCE) LAYER ====================== *
+ * Fully scaffolded native PKCE flow + per-character token storage and a
+ * TTL cache, all in localStorage. Dormant while USE_MOCK = true.
+ * ===================================================================== */
+const Store = {
+  k: (s) => 'foundry:' + s,
+  get(s)      { try { return JSON.parse(localStorage.getItem(this.k(s))); } catch { return null; } },
+  set(s, v)   { localStorage.setItem(this.k(s), JSON.stringify(v)); },
+  del(s)      { localStorage.removeItem(this.k(s)); },
+};
+
+function cacheGet(key) {
+  const e = Store.get('cache:' + key);
+  if (!e) return null;
+  if (Date.now() - e.t > CONFIG.CACHE_TTL_MS) { Store.del('cache:' + key); return null; }
+  return e.v;
+}
+function cacheSet(key, v) { Store.set('cache:' + key, { t: Date.now(), v }); }
+
+// --- PKCE helpers ---
+function b64url(buf) {
+  return btoa(String.fromCharCode(...new Uint8Array(buf))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+}
+async function sha256(str) { return crypto.subtle.digest('SHA-256', new TextEncoder().encode(str)); }
+function randStr(n = 48) { return b64url(crypto.getRandomValues(new Uint8Array(n))); }
+
+async function beginLogin() {
+  if (!CONFIG.CLIENT_ID) {
+    alert('Set CONFIG.CLIENT_ID (and USE_MOCK = false) to enable EVE SSO. Currently running on embedded mock data.');
+    return;
+  }
+  const verifier  = randStr(48);
+  const challenge = b64url(await sha256(verifier));
+  const state     = randStr(16);
+  Store.set('pkce', { verifier, state });
+  const u = new URL(CONFIG.AUTH_BASE);
+  u.search = new URLSearchParams({
+    response_type: 'code', redirect_uri: CONFIG.CALLBACK_URL, client_id: CONFIG.CLIENT_ID,
+    scope: CONFIG.SCOPES.join(' '), code_challenge: challenge, code_challenge_method: 'S256', state,
+  }).toString();
+  location.assign(u.toString());
+}
+
+async function handleCallback() {
+  const p = new URLSearchParams(location.search);
+  const code = p.get('code'); const state = p.get('state');
+  if (!code) return false;
+  const pkce = Store.get('pkce');
+  if (!pkce || pkce.state !== state) { console.warn('PKCE state mismatch'); return false; }
+  try {
+    const res = await fetch(CONFIG.TOKEN_URL, {
+      method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        grant_type: 'authorization_code', code, client_id: CONFIG.CLIENT_ID, code_verifier: pkce.verifier,
+      }),
+    });
+    const tok = await res.json();
+    const claims = JSON.parse(atob(tok.access_token.split('.')[1]));
+    const charId = String(claims.sub).split(':').pop();
+    const chars = Store.get('chars') || {};
+    chars[charId] = { name: claims.name, ...tok, expires_at: Date.now() + tok.expires_in * 1000 };
+    Store.set('chars', chars);
+    Store.del('pkce');
+    history.replaceState({}, '', CONFIG.CALLBACK_URL); // strip ?code= from URL
+    return true;
+  } catch (e) { console.error('Token exchange failed', e); return false; }
+}
+
+async function validToken(charId) {
+  const chars = Store.get('chars') || {};
+  const c = chars[charId];
+  if (!c) return null;
+  if (Date.now() < c.expires_at - 30000) return c.access_token;
+  // refresh
+  const res = await fetch(CONFIG.TOKEN_URL, {
+    method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({ grant_type: 'refresh_token', refresh_token: c.refresh_token, client_id: CONFIG.CLIENT_ID }),
+  });
+  const tok = await res.json();
+  chars[charId] = { ...c, ...tok, expires_at: Date.now() + tok.expires_in * 1000 };
+  Store.set('chars', chars);
+  return tok.access_token;
+}
+
+async function esi(charId, path) {
+  const ck = charId + ':' + path;
+  const hit = cacheGet(ck); if (hit) return hit;
+  const token = await validToken(charId);
+  const res = await fetch(CONFIG.ESI_BASE + path, { headers: token ? { Authorization: 'Bearer ' + token } : {} });
+  if (!res.ok) throw new Error('ESI ' + res.status + ' on ' + path);
+  const data = await res.json();
+  cacheSet(ck, data);
+  return data;
+}
+
+/* -------------------- DATA PROVIDERS (mock | live) -------------------- *
+ * Each returns the normalized shapes the render layer expects. When you
+ * go live, replace the mock branch bodies with esi() calls + your own
+ * SDE name resolution; the render code does not change.
+ * ------------------------------------------------------------------- */
+const Data = {
+  async characters()       { return CONFIG.USE_MOCK ? MOCK_CHARACTERS         : Object.entries(Store.get('chars')||{}).map(([id,c])=>({id,name:c.name})); },
+  async assets()           { return CONFIG.USE_MOCK ? MOCK_ASSETS             : []; /* esi() + SDE resolve */ },
+  async blueprints()       { return CONFIG.USE_MOCK ? MOCK_BLUEPRINTS         : []; },
+  async industryJobs()     { return CONFIG.USE_MOCK ? MOCK_INDUSTRY_JOBS      : []; },
+  async structures()       { return CONFIG.USE_MOCK ? MOCK_STRUCTURES         : []; },
+  async corpStructures()   { return CONFIG.USE_MOCK ? MOCK_CORP_STRUCTURES    : []; },
+  async activeExtractions(){ return CONFIG.USE_MOCK ? MOCK_ACTIVE_EXTRACTIONS : []; },
+};
+
+/* ============================ RENDER ================================= */
+const $  = (s) => document.querySelector(s);
+const $$ = (s) => Array.from(document.querySelectorAll(s));
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const tierClass = (t) => 'pill pill-' + ({'T1':'t1','T2':'t2','Faction':'faction','T3':'t3','Officer':'officer'}[t] || 't1');
+const nf = new Intl.NumberFormat('en-US');
+
+let CURRENT_CHAR = 'all';
+let ASSET_CACHE = [];
+
+function ownerVisible(owner) {
+  if (CURRENT_CHAR === 'all') return true;
+  return owner === CURRENT_CHAR;
+}
+
+/* ---- Tab 1: Assets + live filter ---- */
+function renderAssets() {
+  const q = ($('#asset-search').value || '').toLowerCase().trim();
+  const rows = ASSET_CACHE.filter(a => ownerVisible(a.owner)).filter(a => {
+    if (!q) return true;
+    return [a.name, a.tier, a.owner, a.system, a.station, a.hangar, String(a.qty)]
+      .join(' ').toLowerCase().includes(q);
+  });
+  $('#asset-body').innerHTML = rows.map(a => `
+    <tr>
+      <td class="text-ink">${esc(a.name)}</td>
+      <td><span class="${tierClass(a.tier)} eve-label">${esc(a.tier)}</span></td>
+      <td class="text-right text-cyan">${nf.format(a.qty)}</td>
+      <td class="${a.owner === a.owner.toUpperCase() ? 'text-amber':'text-ink'}">${esc(a.owner)}</td>
+      <td class="text-green">${esc(a.system)}</td>
+      <td class="text-dim">${esc(a.station)}</td>
+      <td class="text-dim">${esc(a.hangar)}</td>
+    </tr>`).join('') ||
+    `<tr><td colspan="7" class="text-center text-dim py-8 eve-label">No assets match the filter</td></tr>`;
+  $('#asset-count').textContent = rows.length + ' / ' + ASSET_CACHE.filter(a=>ownerVisible(a.owner)).length + ' ITEMS';
+}
+
+/* ---- Tab 2: BPO subtraction engine ---- */
+function renderBlueprints(bps) {
+  // Owned BPOs = blueprint entries with quantity === -1, keyed by type_id.
+  const ownedBPO = new Set(bps.filter(b => b.quantity === -1).map(b => b.type_id));
+  const missing  = SDE_T1_SHIP_BPOS.filter(s => !ownedBPO.has(s.type_id));
+
+  $('#bpo-owned').textContent   = SDE_T1_SHIP_BPOS.length - missing.length;
+  $('#bpo-missing').textContent = missing.length;
+  $('#bpo-total').textContent   = SDE_T1_SHIP_BPOS.length;
+
+  $('#bpo-body').innerHTML = missing.map(m => `
+    <tr>
+      <td class="text-ink">${esc(m.name)}</td>
+      <td class="text-dim">${esc(m.hull)}</td>
+      <td class="text-dim">${m.type_id}</td>
+      <td><span class="pill pill-officer eve-label">MISSING BPO</span></td>
+    </tr>`).join('') ||
+    `<tr><td colspan="4" class="text-center text-green py-8 eve-label">All target BPOs owned — registry complete</td></tr>`;
+}
+
+/* ---- Tab 3: Production lines + countdown ---- */
+function renderProduction(jobs) {
+  $('#prod-body').innerHTML = jobs.filter(j => ownerVisible(j.owner)).map(j => `
+    <tr>
+      <td class="text-ink">${esc(j.output)}</td>
+      <td class="text-right text-cyan">${nf.format(j.qty)}</td>
+      <td class="${j.owner===j.owner.toUpperCase()?'text-amber':'text-ink'}">${esc(j.owner)}</td>
+      <td class="text-dim">${esc(j.facility)}</td>
+      <td class="text-green">${esc(j.activity)}</td>
+      <td class="text-right font-display" data-countdown data-target="${j.end_date}">--:--:--</td>
+    </tr>`).join('') ||
+    `<tr><td colspan="6" class="text-center text-dim py-8 eve-label">No active industry jobs</td></tr>`;
+}
+
+/* ---- Tab 4: Fuel forecasting + decommission banner ---- */
+let UNANCHOR_TARGET = null;
+function renderFuel(structures) {
+  const decom = structures.find(s => s.unanchors_at);
+  const banner = $('#unanchor-banner');
+  if (decom) {
+    UNANCHOR_TARGET = decom.unanchors_at;
+    $('#unanchor-detail').textContent = `${decom.name} (${decom.type}) in ${decom.system} is unanchoring`;
+    $('#unanchor-timer').setAttribute('data-target', decom.unanchors_at);
+    banner.classList.remove('hidden');
+  } else {
+    UNANCHOR_TARGET = null;
+    banner.classList.add('hidden');
+  }
+
+  $('#fuel-body').innerHTML = structures.map(s => {
+    const burn = s.services.reduce((sum, mod) => sum + (SERVICE_BURN[mod] || 0), 0); // blocks/hr
+    const daily = burn * 24, weekly = daily * 7, monthly = daily * 30;
+    const hoursLeft = burn > 0 ? s.fuel_blocks / burn : Infinity;
+    const dryClass = hoursLeft < 72 ? 'stat-crit' : hoursLeft < 24*7 ? 'stat-warn' : 'stat-ok';
+    const dryLabel = !isFinite(hoursLeft) ? 'No burn'
+                   : hoursLeft < 24 ? `${Math.floor(hoursLeft)}h`
+                   : `${Math.floor(hoursLeft/24)}d ${Math.floor(hoursLeft%24)}h`;
+    return `
+      <tr>
+        <td class="text-ink">${esc(s.name)} <span class="text-dim text-[11px]">· ${esc(s.type)}</span>${s.unanchors_at?' <span class="pill pill-officer eve-label">UNANCHORING</span>':''}</td>
+        <td class="text-green">${esc(s.system)}</td>
+        <td class="text-dim text-[11px]">${s.services.map(esc).join(' · ')}</td>
+        <td class="text-right text-cyan">${burn}</td>
+        <td class="text-right">${nf.format(s.fuel_blocks)}</td>
+        <td class="text-right text-ink">${nf.format(daily)}</td>
+        <td class="text-right text-ink">${nf.format(weekly)}</td>
+        <td class="text-right text-ink">${nf.format(monthly)}</td>
+        <td class="${dryClass} eve-label">${dryLabel}</td>
+      </tr>`;
+  }).join('');
+}
+
+/* ---- Tab 5: Idle refineries exclusion matrix ---- */
+function renderRefineries(corpStructures, extractions) {
+  // 1) filter corp structures to refineries only
+  const refineries = corpStructures.filter(s => REFINERY_TYPE_IDS[s.type_id]);
+  // 2) set of structure_ids currently extracting
+  const mining = new Set(extractions.map(e => e.structure_id));
+  // 3) exclusion loop — drop any refinery that is actively mining
+  const idle = refineries.filter(r => !mining.has(r.structure_id));
+
+  $('#ref-summary').textContent =
+    `${refineries.length} REFINERIES · ${mining.size} EXTRACTING · ${idle.length} IDLE`;
+
+  $('#ref-body').innerHTML = idle.map(r => {
+    const blocks = r.fuel_blocks;
+    const fuelClass = blocks === 0 ? 'stat-crit' : blocks < 1000 ? 'stat-warn' : 'stat-ok';
+    const fuelLabel = blocks === 0 ? 'EMPTY' : blocks < 1000 ? `LOW · ${nf.format(blocks)}` : `OK · ${nf.format(blocks)}`;
+    return `
+      <tr>
+        <td class="text-cyan">${r.structure_id}</td>
+        <td class="text-ink">${REFINERY_TYPE_IDS[r.type_id]}</td>
+        <td class="text-green">${esc(r.system)}</td>
+        <td class="${fuelClass} eve-label">${fuelLabel}</td>
+      </tr>`;
+  }).join('') ||
+    `<tr><td colspan="4" class="text-center text-dim py-8 eve-label">No idle refineries — all extracting</td></tr>`;
+}
+
+/* ====================== LIVE COUNTDOWN TICKER ======================== */
+function fmtRemaining(ms) {
+  if (ms <= 0) return 'DELIVERED';
+  const s = Math.floor(ms / 1000);
+  const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = s % 60;
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${pad(h)}:${pad(m)}:${pad(sec)}`;
+}
+function tick() {
+  const now = Date.now();
+  $$('[data-countdown][data-target]').forEach(el => {
+    const t = new Date(el.getAttribute('data-target')).getTime();
+    const remaining = t - now;
+    el.textContent = fmtRemaining(remaining);
+    el.classList.toggle('stat-crit', remaining > 0 && remaining < 3600 * 1000);
+    el.classList.toggle('stat-ok',   remaining <= 0);
+  });
+}
+
+/* ===================== PICTURE-IN-PICTURE HUD ======================== *
+ * Clones the active tab's table into a borderless pure-black floating
+ * window and keeps it live-synced (so countdowns keep ticking on top of
+ * the EVE client in Fixed Window mode).
+ * ===================================================================== */
+let pipWindow = null;
+let pipSync = null;
+
+async function popOut() {
+  if (!('documentPictureInPicture' in window)) {
+    alert('Document Picture-in-Picture is not available in this browser.\nUse a recent Chromium-based browser (Chrome/Edge 116+) over HTTPS.');
+    return;
+  }
+  if (pipWindow && !pipWindow.closed) { pipWindow.focus(); return; }
+
+  pipWindow = await window.documentPictureInPicture.requestWindow({ width: 460, height: 560 });
+
+  // carry our stylesheets across so the HUD matches the app
+  for (const sheet of document.styleSheets) {
+    try {
+      const css = Array.from(sheet.cssRules).map(r => r.cssText).join('\n');
+      const style = pipWindow.document.createElement('style');
+      style.textContent = css;
+      pipWindow.document.head.appendChild(style);
+    } catch { /* cross-origin (CDN) sheet — re-link it instead */
+      if (sheet.href) {
+        const link = pipWindow.document.createElement('link');
+        link.rel = 'stylesheet'; link.href = sheet.href;
+        pipWindow.document.head.appendChild(link);
+      }
+    }
+  }
+
+  pipWindow.document.body.className = 'pip-body';
+  const mount = pipWindow.document.createElement('div');
+  pipWindow.document.body.appendChild(mount);
+
+  const syncHud = () => {
+    const active = $$('[data-panel]').find(p => !p.hidden);
+    if (active && mount) mount.innerHTML = active.innerHTML;
+  };
+  syncHud();
+  pipSync = setInterval(syncHud, 1000); // re-sync each second → live countdowns
+
+  pipWindow.addEventListener('pagehide', () => {
+    clearInterval(pipSync); pipWindow = null;
+  });
+}
+
+/* ============================ BOOT =================================== */
+function switchTab(name) {
+  $$('[role="tab"]').forEach(b => b.setAttribute('aria-selected', String(b.dataset.tab === name)));
+  $$('[data-panel]').forEach(p => { p.hidden = (p.id !== 'tab-' + name); });
+}
+
+async function boot() {
+  // OAuth return?
+  if (location.search.includes('code=')) {
+    const ok = await handleCallback();
+    if (ok) CONFIG.USE_MOCK = false;
+  }
+  if (!CONFIG.USE_MOCK) $('#data-mode').textContent = 'LIVE ESI';
+
+  // populate pilot selector
+  const chars = await Data.characters();
+  const sel = $('#char-select');
+  chars.forEach(c => { const o = document.createElement('option'); o.value = c.name; o.textContent = c.name; sel.appendChild(o); });
+  sel.addEventListener('change', async () => {
+    CURRENT_CHAR = sel.value;
+    ASSET_CACHE = await Data.assets();
+    renderAssets();
+    renderProduction(await Data.industryJobs());
+  });
+
+  // load + render everything
+  ASSET_CACHE = await Data.assets();
+  renderAssets();
+  renderBlueprints(await Data.blueprints());
+  renderProduction(await Data.industryJobs());
+  renderFuel(await Data.structures());
+  renderRefineries(await Data.corpStructures(), await Data.activeExtractions());
+
+  // wire UI
+  $$('[role="tab"]').forEach(b => b.addEventListener('click', () => switchTab(b.dataset.tab)));
+  $('#asset-search').addEventListener('input', renderAssets);
+  $('#popout-btn').addEventListener('click', popOut);
+  $('#login-btn').addEventListener('click', beginLogin);
+
+  // start the master 1 Hz ticker
+  tick();
+  setInterval(tick, 1000);
+}
+
+boot();
+</script>
+</body>
+</html>
