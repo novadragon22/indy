@@ -304,8 +304,11 @@ let plan=JSON.parse(localStorage.getItem('eve_ind_plan')||'[]');         // [{pi
 let structures=JSON.parse(localStorage.getItem('eve_ind_structs')||'[]'); // [{id,name,type,sec,rigs,services,matPct,timePct}]
 let activeStruct=+(localStorage.getItem('eve_ind_struct')||0)||null;      // index into structures
 let planLoc=localStorage.getItem('eve_ind_ploc')||'';                     // asset location_id to draw resources from
+let planSrc=localStorage.getItem('eve_ind_psrc')||'me';                   // 'me' | 'corp:<corpId>'
+let planDiv=localStorage.getItem('eve_ind_pdiv')||'';                     // corp hangar division flag (CorpSAGn) or '' = all
 let assetByLoc={};               // {locationId:{typeId:qty}} aggregated from ESI assets
 let locNames={};                 // locationId -> name
+let corpDivNames={};             // {corpId:{CorpSAGn:name}}
 const savePlan=()=>localStorage.setItem('eve_ind_plan',JSON.stringify(plan));
 const saveStructs=()=>localStorage.setItem('eve_ind_structs',JSON.stringify(structures));
 function addToPlan(pid,r,m,t){ const rec=recipeByProduct[pid]; if(!rec)return;
@@ -332,15 +335,22 @@ function renderSubbar(){
     sb.innerHTML=`<span class="toggle ${missingOnly?'on':''}" id="missTgl"><span class="sw"></span>Missing only</span><span class="sp"></span><span class="summ" id="bpSumm"></span>`;
     document.getElementById('missTgl').onclick=()=>{ missingOnly=!missingOnly; renderSubbar(); renderList(); };
   } else {
-    // planner: structure (bonuses) + resource location selectors
+    // planner: structure (bonuses) + resource source/location/hangar selectors
     const structOpts=structures.map((s,i)=>`<option value="${i}" ${i===activeStruct?'selected':''}>${s.name} · ${s.type}</option>`).join('');
-    const locIds=Object.keys(assetByLoc).sort((a,b)=>(locNames[b]?1:0)-(locNames[a]?1:0));
-    const locOpts='<option value="">— all my assets —</option>'+locIds.map(l=>`<option value="${l}" ${l===planLoc?'selected':''}>${locNames[l]||('location '+l)}</option>`).join('');
-    sb.innerHTML=`<span class="summ">Structure</span><select id="pStruct"><option value="">none (no bonus)</option>${structOpts}</select>
-      <span class="summ">Resources</span><select id="pLoc">${locOpts}</select>
+    const srcOpts=planSources().map(s=>`<option value="${s.key}" ${s.key===planSrc?'selected':''}>${s.label}</option>`).join('');
+    const locs=planLocations();
+    const locOpts='<option value="">— all locations —</option>'+locs.map(l=>`<option value="${l}" ${l===planLoc?'selected':''}>${locNames[l]||'Resolving…'}</option>`).join('');
+    const divs=planDivisions(); const isCorp=planSrc.indexOf('corp:')===0; const cid=isCorp?planSrc.slice(5):null;
+    const divOpts='<option value="">— all hangars —</option>'+divs.map(d=>`<option value="${d}" ${d===planDiv?'selected':''}>${divLabel(cid,d)}</option>`).join('');
+    sb.innerHTML=`<span class="summ">Structure</span><select id="pStruct"><option value="">none</option>${structOpts}</select>
+      <span class="summ">Resources</span><select id="pSrc">${srcOpts}</select>
+      <select id="pLoc">${locOpts}</select>
+      ${isCorp?`<select id="pDiv">${divOpts}</select>`:''}
       <span class="sp"></span><span class="chipf" id="manageStruct">Structures…</span>`;
     document.getElementById('pStruct').onchange=e=>{ activeStruct=e.target.value===''?null:+e.target.value; localStorage.setItem('eve_ind_struct',activeStruct||''); renderPlannerDetail(); };
-    document.getElementById('pLoc').onchange=e=>{ planLoc=e.target.value; localStorage.setItem('eve_ind_ploc',planLoc); renderPlannerDetail(); };
+    document.getElementById('pSrc').onchange=e=>{ planSrc=e.target.value; planLoc=''; planDiv=''; localStorage.setItem('eve_ind_psrc',planSrc); localStorage.setItem('eve_ind_ploc',''); localStorage.setItem('eve_ind_pdiv',''); renderSubbar(); renderPlannerDetail(); };
+    document.getElementById('pLoc').onchange=e=>{ planLoc=e.target.value; planDiv=''; localStorage.setItem('eve_ind_ploc',planLoc); localStorage.setItem('eve_ind_pdiv',''); renderSubbar(); renderPlannerDetail(); };
+    const pd=document.getElementById('pDiv'); if(pd) pd.onchange=e=>{ planDiv=e.target.value; localStorage.setItem('eve_ind_pdiv',planDiv); renderPlannerDetail(); };
     document.getElementById('manageStruct').onclick=()=>{ renderRegistry(); };
   }
 }
@@ -421,7 +431,33 @@ function planTree(pid,qty,depth,itemMe,structMat,top){
   return {pid,qty,runs:r,kind:rec.kind,children:kids}; }
 const planBuy=new Set();   // raw nodes forced to buy in planner
 
-function locPool(){ return planLoc&&assetByLoc[planLoc] ? assetByLoc[planLoc] : assetQty; }
+// planner resource sources: personal characters, or any accessible corp (independent of the aggregation picker)
+function planSources(){ const out=[{key:'me',label:'My characters'}];
+  for(const cid in corpData){ if(corpData[cid].access) out.push({key:'corp:'+cid,label:corpData[cid].name||('Corp '+cid)}); }
+  return out; }
+function divLabel(cid,flag){ if(flag==='other')return 'Other / in space';
+  const m=corpDivNames[cid]; if(m&&m[flag])return m[flag]; const n=(flag.match(/CorpSAG(\d)/)||[])[1]; return n?('Division '+n):flag; }
+function planLocations(){ const locs={};
+  if(planSrc==='me'){ selChars.forEach(c=>{ const d=charData[c]; if(d&&d.byLoc) Object.keys(d.byLoc).forEach(l=>locs[l]=1); }); }
+  else if(planSrc.indexOf('corp:')===0){ const cd=corpData[planSrc.slice(5)]; if(cd&&cd.byLocDiv) Object.keys(cd.byLocDiv).forEach(l=>locs[l]=1); }
+  return Object.keys(locs); }
+function planDivisions(){ if(planSrc.indexOf('corp:')!==0||!planLoc) return []; const cd=corpData[planSrc.slice(5)];
+  const at=cd&&cd.byLocDiv[planLoc]; return at?Object.keys(at):[]; }
+function locPool(){
+  if(planSrc==='me'){ const m={};
+    if(!planLoc){ selChars.forEach(c=>{ const d=charData[c]; if(d) for(const t in d.assetQty) m[t]=(m[t]||0)+d.assetQty[t]; }); return m; }
+    selChars.forEach(c=>{ const d=charData[c]; const src=d&&d.byLoc[planLoc]; if(src) for(const t in src) m[t]=(m[t]||0)+src[t]; }); return m; }
+  if(planSrc.indexOf('corp:')===0){ const cd=corpData[planSrc.slice(5)]; if(!cd||!cd.byLocDiv) return {}; const m={};
+    if(!planLoc){ for(const l in cd.byLocDiv) for(const dv in cd.byLocDiv[l]) for(const t in cd.byLocDiv[l][dv]) m[t]=(m[t]||0)+cd.byLocDiv[l][dv][t]; return m; }
+    const at=cd.byLocDiv[planLoc]||{};
+    if(planDiv){ const src=at[planDiv]||{}; for(const t in src) m[t]=(m[t]||0)+src[t]; }
+    else { for(const dv in at) for(const t in at[dv]) m[t]=(m[t]||0)+at[dv][t]; }
+    return m; }
+  return {}; }
+function poolLabel(){ const src=planSrc==='me'?'my characters':(corpData[planSrc.slice(5)]?.name||'corp');
+  const loc=planLoc?(locNames[planLoc]||'selected location'):'all locations';
+  const div=(planSrc.indexOf('corp:')===0&&planDiv)?(' · '+divLabel(planSrc.slice(5),planDiv)):'';
+  return `${src} · ${loc}${div}`; }
 
 function renderPlanList(){
   const el=document.getElementById('plist');
@@ -464,7 +500,7 @@ function renderPlannerDetail(){
   const hb=st?headlineBonus(st):{mat:0,time:0};
   el.innerHTML = !plan.length ? '<div class="empty"><span class="diamond"></span>Add blueprints to plan a construction run</div>' : `
     <div class="dhead"><div><h1>Construction plan</h1>
-      <div class="sub">${plan.length} job${plan.length!==1?'s':''}${st?` · ${st.name} (${st.type})`:' · no structure selected'}${planLoc?` · resources @ ${locNames[planLoc]||('loc '+planLoc)}`:' · resources: all my assets'}</div></div></div>
+      <div class="sub">${plan.length} job${plan.length!==1?'s':''}${st?` · ${st.name} (${st.type})`:' · no structure selected'} · resources: ${poolLabel()}</div></div></div>
     ${st?`<div class="own">◆ ${st.name} · ${st.sec} sec · ${(st.rigs||[]).length} rig${(st.rigs||[]).length!==1?'s':''} — bonuses applied <b>per category</b> (see ME column). Generic rigs: <b>material −${hb.mat}%</b> · <b>time −${hb.time}%</b>.</div>`:'<div class="hint" style="margin-bottom:16px">No structure selected — pick one in the bar above to apply rig bonuses, or register one via Structures….</div>'}
     <div class="kpi">
       <div class="c"><div class="l">Jobs</div><div class="v">${plan.length}</div></div>
@@ -475,7 +511,7 @@ function renderPlannerDetail(){
     </div>
     <div class="sec"><h3><span class="diamond"></span>Jobs</h3>
       <table><thead><tr><th>Product</th><th class="r">Runs</th><th class="r">ME</th><th class="r">Rig mat</th><th class="r">Time</th></tr></thead><tbody>${jobsRows.join('')}</tbody></table></div>
-    <div class="sec"><h3><span class="diamond"></span>Combined materials · need vs resources in ${planLoc?(locNames[planLoc]||'location'):'all assets'}</h3>
+    <div class="sec"><h3><span class="diamond"></span>Combined materials · need vs resources in ${poolLabel()}</h3>
       <table class="raw-tot"><thead><tr><th>Material</th><th class="r">Need</th><th class="r">Have</th><th class="r">Short</th></tr></thead><tbody>${matRows}</tbody>
       <tfoot><tr><td>Totals</td><td class="r mono">${fmt(tNeed)}</td><td class="r mono">${fmt(tHave)}</td><td class="r mono ${tShort?'short':'full'}">${tShort?fmt(tShort):'✓'}</td></tr></tfoot></table></div>`;
   el.querySelectorAll('[data-pbuy]').forEach(b=>b.onclick=()=>{ const id=+b.dataset.pbuy; planBuy.has(id)?planBuy.delete(id):planBuy.add(id); renderPlannerDetail(); });
@@ -671,7 +707,7 @@ const APP={
 };
 const SCOPES=['publicData','esi-skills.read_skills.v1','esi-industry.read_character_jobs.v1',
   'esi-characters.read_blueprints.v1','esi-assets.read_assets.v1','esi-industry.read_corporation_jobs.v1',
-  'esi-corporations.read_blueprints.v1','esi-assets.read_corporation_assets.v1','esi-universe.read_structures.v1'].join(' ');
+  'esi-corporations.read_blueprints.v1','esi-assets.read_corporation_assets.v1','esi-universe.read_structures.v1','esi-corporations.read_divisions.v1'].join(' ');
 const SESS_KEY='eve_ind_session';
 const ACTIVITY={1:'Manufacturing',3:'TE Research',4:'ME Research',5:'Copying',7:'Reverse Eng',8:'Invention',9:'Reaction',11:'Reaction'};
 
@@ -749,12 +785,27 @@ function tallyByLoc(arr){
   const out={}; (arr||[]).forEach(a=>{ const t=top(a.location_id); (out[t]=out[t]||{}); out[t][a.type_id]=(out[t][a.type_id]||0)+(a.quantity||0); });
   return out;
 }
+// corp assets bucketed by top location AND hangar division (CorpSAGn)
+function tallyByLocDiv(arr){
+  const byId={}; (arr||[]).forEach(a=>{ byId[a.item_id]={loc:a.location_id, flag:a.location_flag}; });
+  const isStation=l=>l>=60000000&&l<64000000, isStruct=l=>l>=1000000000000;
+  const out={};
+  (arr||[]).forEach(a=>{ let node={loc:a.location_id, flag:a.location_flag}, g=0;
+    while(!isStation(node.loc)&&!isStruct(node.loc)&&byId[node.loc]!=null&&g++<24){ node=byId[node.loc]; }
+    const loc=node.loc; const div=(node.flag&&node.flag.indexOf('CorpSAG')===0)?node.flag:'other';
+    (out[loc]=out[loc]||{}); (out[loc][div]=out[loc][div]||{});
+    out[loc][div][a.type_id]=(out[loc][div][a.type_id]||0)+(a.quantity||0); });
+  return out;
+}
 async function resolveLocations(){
-  const ids=Object.keys(assetByLoc).filter(l=>!locNames[l]);
-  await pool(ids, 6, async l=>{ const n=+l;
+  const ids={}; selChars.forEach(c=>{ const d=charData[c]; if(d&&d.byLoc) Object.keys(d.byLoc).forEach(l=>ids[l]=1); });
+  for(const cid in corpData){ const cd=corpData[cid]; if(cd.byLocDiv) Object.keys(cd.byLocDiv).forEach(l=>ids[l]=1); }
+  const todo=Object.keys(ids).filter(l=>!locNames[l]);
+  await pool(todo, 6, async l=>{ const n=+l;
     try{ if(n>=60000000&&n<64000000){ const s=await esiGet('/universe/stations/'+n+'/'); locNames[l]=s.name; }
          else if(n>=1000000000000){ const s=await(await authGet('/universe/structures/'+n+'/', firstChar())).json(); locNames[l]=s.name; }
-         else locNames[l]='location '+n; }catch(e){ locNames[l]='location '+n; } });
+         else locNames[l]='Unknown location'; }
+    catch(e){ locNames[l]= n>=1000000000000?'Unknown structure':(n>=60000000&&n<64000000?'Unknown station':'Unknown location'); } });
   if(mode==='plan') renderSubbar();
 }
 function firstChar(){ return +Object.keys(chars)[0]; }
@@ -779,7 +830,9 @@ async function loadAll(){
     let ok=false;
     for(const cid of corpMembers[corpId]){
       try{ cd.bps=await authPages('/corporations/'+corpId+'/blueprints/',cid); ok=true; }catch(e){ continue; }
-      try{ const arr=await authPages('/corporations/'+corpId+'/assets/',cid); cd.assetQty=tally(arr); cd.byLoc=tallyByLoc(arr); }catch(e){}   // corp hangars across all offices/structures
+      try{ const arr=await authPages('/corporations/'+corpId+'/assets/',cid); cd.assetQty=tally(arr); cd.byLoc=tallyByLoc(arr); cd.byLocDiv=tallyByLocDiv(arr); }catch(e){}   // corp hangars across all offices/structures, by division
+      try{ const dv=await(await authGet('/corporations/'+corpId+'/divisions/',cid)).json(); const map={};
+           ((dv.hangar)||[]).forEach(h=>{ if(h.name) map['CorpSAG'+h.division]=h.name; }); corpDivNames[corpId]=map; }catch(e){}
       try{ cd.jobs=(await(await authGet('/corporations/'+corpId+'/industry/jobs/',cid)).json()).map(j=>({...j,owner:cd.name})); }catch(e){}
       break;
     }
